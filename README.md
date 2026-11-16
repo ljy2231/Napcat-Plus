@@ -11,7 +11,7 @@
 **国内服务器（加速站已写进命令，全程不访问 GitHub）：**
 
 ```bash
-curl -fsSL https://hub.002230.xyz/https://raw.githubusercontent.com/ljy2231/Napcat-Plus/main/deploy/install-cn.sh | bash
+curl -fsSL https://hub.002230.xyz:44300/https://raw.githubusercontent.com/ljy2231/Napcat-Plus/main/deploy/install-cn.sh | bash
 ```
 
 **海外 / 直连 GHCR：**
@@ -96,7 +96,7 @@ docker compose up -d
 或者直接再跑一次安装脚本（幂等，不会动数据和 Token）：
 
 ```bash
-curl -fsSL https://hub.002230.xyz/https://raw.githubusercontent.com/ljy2231/Napcat-Plus/main/deploy/install-cn.sh | bash
+curl -fsSL https://hub.002230.xyz:44300/https://raw.githubusercontent.com/ljy2231/Napcat-Plus/main/deploy/install-cn.sh | bash
 ```
 
 ### 手动 docker run 装的

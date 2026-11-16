@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Napcat-Plus 一键安装（国内镜像加速版，单文件自包含，不访问 GitHub）
 #
-#   curl -fsSL https://hub.002230.xyz/https://raw.githubusercontent.com/ljy2231/Napcat-Plus/main/deploy/install-cn.sh | bash
+#   curl -fsSL https://hub.002230.xyz:44300/https://raw.githubusercontent.com/ljy2231/Napcat-Plus/main/deploy/install-cn.sh | bash
 #
 # 可选覆盖（一般不用管）：
 #   NAPCAT_PLUS_MIRROR=hub.002230.xyz:44300
