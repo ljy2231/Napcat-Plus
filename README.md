@@ -4,102 +4,22 @@
 
 > 非腾讯官方产品，也不代表 NapCat 原作者。账号风控、平台协议变化和上游原生依赖仍可能影响可用性。不得用于骚扰、垃圾消息或未经授权的账号操作。
 
-## 来源与许可
+## 快速开始
 
-- 基线：[`ljy2231/NapCatQQ@72912f2`](https://github.com/ljy2231/NapCatQQ/commit/72912f293924f43463b5976b01fc094a8ae11481)，2026-11-10，`docs: ending`；保留此前 Git 历史。
-- 原项目：[`NapNeko/NapCatQQ`](https://github.com/NapNeko/NapCatQQ)，Copyright © 2024 Mlikiowa。
-- 完整保留 [上游许可证](<LICENSE>) 与第三方版权声明。**这不是 MIT/Apache 项目，公开可见不等于可以任意再发布或商用。** 修改、公开发布及二次分发必须满足原许可证与另行取得的授权；本仓库不向下游授予超出上游的权利。
-- 原上游发布流程已归档，不会再向 NapNeko 的文档、镜像、API 平台或其他仓库写入。
-
-## 主要改造
-
-### 登录稳定性
-
-- 初始化 QQ 原生层之前注册登录监听器，缓存早到的连接事件。
-- 等待原生配置、历史账号列表和 WebUI 自动登录策略就绪后再启动登录。
-- 连接代次与单飞控制避免重复登录；断线使旧事件失效。
-- 超时提供具体阶段而非无限转圈；失败不无限重试密码；成功不被迟到错误覆盖。
-- 保留二维码、快捷登录、密码及验证流程。
-
-### 原生 GSCore 集成
-
-内置 GSUID Core WebSocket 适配器，不需要把第三方插件伪装为 `napcat-plugin-builtin`。
-
-- 可视化开关、地址、Token、有限指数退避、手动重连、真实连接状态。
-- 热更新使用连接代次，旧连接的迟到 `close/error` 不会清空新连接；断线后旧队列任务也失效。
-- Token 不在状态/配置读取 API 中回显，省略保留、空字符串清除；本地配置权限为 `0600`。
-- 入站：文本/@/表情/引用/图片/语音/视频/文件/合并转发；引用通过只读 `get_msg` 补正文与媒体，私聊文件通过 `get_private_file_url` 补下载地址。
-- 出站：兼容 `link://HTTP(S)`、裸 base64、`base64://`、`reply_id`、Markdown 转文本，以及最多 3 层嵌套、20 个有序动作的混合消息；整包先校验再发送。
-- 跳过 GSCore 的 `group`/`image_size`/`buttons`/`template_*` 记账标记段。**GSCore 会给每帧群消息末尾追加 `group` 段，早期版本把它当未知类型导致整条丢弃、群内无回复且只在 `lastError` 留下提示。**
-- 不提供任意 OneBot 动作执行；拒绝跨账号目标、非文本控制动作和从 GSCore 请求读取本机文件。
-- 默认关闭。启用后应**停用旧 GSCore 桥接插件**，避免重复收发。
-- 仍未覆盖旧插件全部特性：notice/meta 事件、撤回回执、撤回/禁言控制、群开关与黑名单命令、按钮模板。切换前请用测试账号回归。
-
-### 插件目录（原插件商店）
-
-上游索引 `NapNeko/napcat-plugin-index` 已删库，原商店会串行重试镜像后整页报错。
-
-- 首次立即返回随包目录（内置 GSCore/清理/诊断 + SSQQ 官方项目页），官方索引在后台限时检查。
-- 显示来源状态（在线/缓存/随包）、最近检查时间和失败摘要，不再长时间转圈。
-- 不再加载第三方头像、站外 README 或 favicon 服务；外部页面需用户主动打开。
-- **在线一键安装已暂停**：旧安装器会先删除现有插件再解压未校验的包，且远端 SHA 不是独立信任根。POST 与 SSE 安装接口均在后端拒绝，不能通过 mirror/force 绕过。恢复的是目录浏览与内置入口，不是所有被删插件的一键安装。
-
-### 内置工具
-
-- **聊天与事件**：保留原有 OneBot 实时消息/聊天入口。
-- **缓存清理**：日志/临时缓存先预览、再确认删除，60 秒一次性预览；默认不运行定时清理，不动 QQ 数据库。
-- **插件调试**：已鉴权的插件状态、开关和手动热重载；不额外开放调试 WebSocket 端口。
-- SSQQ / Stapxs QQ Lite **未捆绑**：插件外壳与客户端使用不同许可证，且预构建包还含字体/远程资源。详见 [SSQQ 来源与许可核对](<docs/ssqq-integration.md>)；用户仍可单独安装合规版本。
-
-GSCore 是受信任服务：开启后会转发 QQ 消息并接受指定聊天的回复。仅连接自己管理的实例；公网连接使用 `wss://` 和 Token。其连接协议参考 [GSUID Core 消息模型](https://github.com/Genshin-bots/gsuid_core/blob/master/gsuid_core/models.py)。不声称兼容所有插件扩展（撤回回执、频道、复杂节点等需另行适配）。
-
-### 控制台与部署
-
-- 中文控制台、深浅主题、响应式导航，保留原 OneBot/聊天/文件/插件功能。
-- QQ 未登录时仍可查看诊断和管理 GSCore 配置。
-- 基于源码构建 WebUI 与 Shell；固定 QQ 运行时镜像摘要。
-- GitHub CI：类型检查、测试、构建；独立 GHCR 工作流仅发布本仓库镜像。
-- 默认阻止上游在线更新覆盖增强功能，升级使用本项目固定镜像。
-
-## 本地开发
-
-需要 Node.js 24 与 pnpm 9.15.9。
-
-```bash
-corepack enable
-pnpm install --frozen-lockfile --ignore-scripts
-pnpm run typecheck
-pnpm --filter napcat-test exec vitest run
-pnpm run build:webui
-pnpm run build:shell
-```
-
-依赖安装默认不执行生命周期脚本；原生 QQ 测试需要相应运行环境，不能由纯单元测试替代。
-
-## 一键安装（预构建镜像）
-
-镜像发布在 **GitHub Container Registry**（Linux amd64）：
+镜像已发布到 GitHub Container Registry，无需构建。支持 Linux amd64。
 
 | 镜像 | 说明 |
 | --- | --- |
 | `ghcr.io/ljy2231/napcat-plus:latest` / `:v0.2.0` | 应用镜像，约 2.4 GB |
 | `ghcr.io/ljy2231/napcat-plus-base:qq-3.2.34-53644` | 固定 QQ 运行时；上游 `mlikiowa/napcat-docker` 已随 NapCat 删库消失，此镜像为缓存复刻，源码构建依赖它 |
 
-> 首次拉取前如仓库未设置包公开，会返回 401。包可见性需在 GitHub 网页的 Package settings 中改为 Public，或先用 `docker login ghcr.io`。
-
+> 两个包均已设为 Public，可直接匿名拉取；已验证 `docker pull` 与一键脚本在新目录下可用。
 
 **一条命令**拉取镜像并启动（自动生成 WebUI Token、建目录、等健康检查）：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ljy2231/Napcat-Plus/main/deploy/install.sh | bash
 ```
-
-> 若 GHCR 包仍为私有，先登录一次再执行：
->
-> ```bash
-> echo "<你的 GitHub Token>" | docker login ghcr.io -u ljy2231 --password-stdin
-> curl -fsSL https://raw.githubusercontent.com/ljy2231/Napcat-Plus/main/deploy/install.sh | bash
-> ```
 
 **不用脚本的纯 docker 一行**（适合临时试用，Token 会打印在日志里）：
 
@@ -172,6 +92,78 @@ docker compose --env-file deploy/.env -f deploy/compose.yaml up -d --build
 将 GSCore 和 Napcat-Plus 加入同一个 Docker 网络，在控制台填写 `ws://<GSCore服务名>:8765`。如果 GSCore 使用 `network_mode: service:...` 或共享代理容器网络，应填那个网络容器的服务名。`localhost` 指当前 Napcat-Plus 容器，不是宿主机或另一个容器。无需为容器间通信开放公网端口。
 
 仅保存地址不代表连通：QQ 登录后看连接状态与诊断结果。GSCore 服务本身不由示例 Compose 自动安装，避免未经确认引入不固定的镜像或修改已有服务。
+
+## 来源与许可
+
+- 基线：[`ljy2231/NapCatQQ@72912f2`](https://github.com/ljy2231/NapCatQQ/commit/72912f293924f43463b5976b01fc094a8ae11481)，2026-11-10，`docs: ending`；保留此前 Git 历史。
+- 原项目：[`NapNeko/NapCatQQ`](https://github.com/NapNeko/NapCatQQ)，Copyright © 2024 Mlikiowa。
+- 完整保留 [上游许可证](<LICENSE>) 与第三方版权声明。**这不是 MIT/Apache 项目，公开可见不等于可以任意再发布或商用。** 修改、公开发布及二次分发必须满足原许可证与另行取得的授权；本仓库不向下游授予超出上游的权利。
+- 原上游发布流程已归档，不会再向 NapNeko 的文档、镜像、API 平台或其他仓库写入。
+
+## 主要改造
+
+### 登录稳定性
+
+- 初始化 QQ 原生层之前注册登录监听器，缓存早到的连接事件。
+- 等待原生配置、历史账号列表和 WebUI 自动登录策略就绪后再启动登录。
+- 连接代次与单飞控制避免重复登录；断线使旧事件失效。
+- 超时提供具体阶段而非无限转圈；失败不无限重试密码；成功不被迟到错误覆盖。
+- 保留二维码、快捷登录、密码及验证流程。
+
+### 原生 GSCore 集成
+
+内置 GSUID Core WebSocket 适配器，不需要把第三方插件伪装为 `napcat-plugin-builtin`。
+
+- 可视化开关、地址、Token、有限指数退避、手动重连、真实连接状态。
+- 热更新使用连接代次，旧连接的迟到 `close/error` 不会清空新连接；断线后旧队列任务也失效。
+- Token 不在状态/配置读取 API 中回显，省略保留、空字符串清除；本地配置权限为 `0600`。
+- 入站：文本/@/表情/引用/图片/语音/视频/文件/合并转发；引用通过只读 `get_msg` 补正文与媒体，私聊文件通过 `get_private_file_url` 补下载地址。
+- 出站：兼容 `link://HTTP(S)`、裸 base64、`base64://`、`reply_id`、Markdown 转文本，以及最多 3 层嵌套、20 个有序动作的混合消息；整包先校验再发送。
+- 跳过 GSCore 的 `group`/`image_size`/`buttons`/`template_*` 记账标记段。**GSCore 会给每帧群消息末尾追加 `group` 段，早期版本把它当未知类型导致整条丢弃、群内无回复且只在 `lastError` 留下提示。**
+- 不提供任意 OneBot 动作执行；拒绝跨账号目标、非文本控制动作和从 GSCore 请求读取本机文件。
+- 默认关闭。启用后应**停用旧 GSCore 桥接插件**，避免重复收发。
+- 仍未覆盖旧插件全部特性：notice/meta 事件、撤回回执、撤回/禁言控制、群开关与黑名单命令、按钮模板。切换前请用测试账号回归。
+
+### 插件目录（原插件商店）
+
+上游索引 `NapNeko/napcat-plugin-index` 已删库，原商店会串行重试镜像后整页报错。
+
+- 首次立即返回随包目录（内置 GSCore/清理/诊断 + SSQQ 官方项目页），官方索引在后台限时检查。
+- 显示来源状态（在线/缓存/随包）、最近检查时间和失败摘要，不再长时间转圈。
+- 不再加载第三方头像、站外 README 或 favicon 服务；外部页面需用户主动打开。
+- **在线一键安装已暂停**：旧安装器会先删除现有插件再解压未校验的包，且远端 SHA 不是独立信任根。POST 与 SSE 安装接口均在后端拒绝，不能通过 mirror/force 绕过。恢复的是目录浏览与内置入口，不是所有被删插件的一键安装。
+
+### 内置工具
+
+- **聊天与事件**：保留原有 OneBot 实时消息/聊天入口。
+- **缓存清理**：日志/临时缓存先预览、再确认删除，60 秒一次性预览；默认不运行定时清理，不动 QQ 数据库。
+- **插件调试**：已鉴权的插件状态、开关和手动热重载；不额外开放调试 WebSocket 端口。
+- SSQQ / Stapxs QQ Lite **未捆绑**：插件外壳与客户端使用不同许可证，且预构建包还含字体/远程资源。详见 [SSQQ 来源与许可核对](<docs/ssqq-integration.md>)；用户仍可单独安装合规版本。
+
+GSCore 是受信任服务：开启后会转发 QQ 消息并接受指定聊天的回复。仅连接自己管理的实例；公网连接使用 `wss://` 和 Token。其连接协议参考 [GSUID Core 消息模型](https://github.com/Genshin-bots/gsuid_core/blob/master/gsuid_core/models.py)。不声称兼容所有插件扩展（撤回回执、频道、复杂节点等需另行适配）。
+
+### 控制台与部署
+
+- 中文控制台、深浅主题、响应式导航，保留原 OneBot/聊天/文件/插件功能。
+- QQ 未登录时仍可查看诊断和管理 GSCore 配置。
+- 基于源码构建 WebUI 与 Shell；固定 QQ 运行时镜像摘要。
+- GitHub CI：类型检查、测试、构建；独立 GHCR 工作流仅发布本仓库镜像。
+- 默认阻止上游在线更新覆盖增强功能，升级使用本项目固定镜像。
+
+## 本地开发
+
+需要 Node.js 24 与 pnpm 9.15.9。
+
+```bash
+corepack enable
+pnpm install --frozen-lockfile --ignore-scripts
+pnpm run typecheck
+pnpm --filter napcat-test exec vitest run
+pnpm run build:webui
+pnpm run build:shell
+```
+
+依赖安装默认不执行生命周期脚本；原生 QQ 测试需要相应运行环境，不能由纯单元测试替代。
 
 ## 自动构建与发布
 
