@@ -8,10 +8,10 @@
 
 一行命令，复制粘贴就能跑（Linux amd64，需要已装 Docker）。
 
-**国内服务器（走加速源，推荐）：**
+**国内服务器（加速站已写进命令，全程不访问 GitHub）：**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ljy2231/Napcat-Plus/main/deploy/install-cn.sh | bash
+curl -fsSL https://hub.002230.xyz/https://raw.githubusercontent.com/ljy2231/Napcat-Plus/main/deploy/install-cn.sh | bash
 ```
 
 **海外 / 直连 GHCR：**
@@ -35,7 +35,7 @@ NAPCAT_PLUS_PORT=6100 NAPCAT_PLUS_DIR=/opt/napcat-plus \
 | `NAPCAT_PLUS_DIR` | `$HOME/napcat-plus` | 安装目录 |
 | `NAPCAT_PLUS_BIND` | `0.0.0.0` | 监听地址，反代后面可设 `127.0.0.1` |
 | `NAPCAT_PLUS_IMAGE` | GHCR `latest` | 指定版本，如 `:v0.2.0-preview.3` |
-| `NAPCAT_PLUS_MIRROR` | 空 | 镜像源前缀，`install-cn.sh` 已内置 |
+| `NAPCAT_PLUS_MIRROR` | 空 | 镜像源前缀；`install-cn.sh` 已内置 `hub.002230.xyz:44300` |
 
 镜像地址（已公开，可匿名拉取）：
 
