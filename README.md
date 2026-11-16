@@ -196,7 +196,8 @@ pnpm run build:shell
 
 - 分支推送/PR：只读权限运行 CI，不使用 `pull_request_target` 执行不可信代码。
 - 推送 `v*` 标签：构建并推送 `ghcr.io/ljy2231/napcat-plus`。
-- 手动镜像构建默认不发布；选择 `publish` 后才推送。首次 GHCR 包的可见性可在 GitHub Packages 中设置。
+- 手动镜像构建默认发布：`publish` 默认为 `true`，会推送带提交 SHA 标签的镜像；仅构建时可将其设为 `false`，但此时不会执行容器启动验证。手动构建不会更新 `latest`；推送 `v*` 标签才会更新。首次 GHCR 包的可见性可在 GitHub Packages 中设置。
+- 当前发布流程先推送镜像，再验证容器启动和 WebUI 响应；验证失败时镜像可能已经发布。该验证不检查二维码是否生成。
 - GHCR 只使用该仓库 `GITHUB_TOKEN`，不需要把个人 Token 写入代码或工作流。
 - 本地构建可覆盖 `QQ_RUNTIME` 参数，但必须重新验证对应 QQ 版本兼容性。
 
