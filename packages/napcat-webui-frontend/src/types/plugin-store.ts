@@ -1,4 +1,4 @@
-export type PluginAvailability = 'installable' | 'builtin' | 'external' | 'unavailable';
+export type PluginAvailability = 'installable' | 'builtin' | 'external' | 'unavailable' | 'local';
 
 export interface PluginStoreItem {
   id: string;

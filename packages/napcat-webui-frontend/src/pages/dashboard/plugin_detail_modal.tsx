@@ -27,7 +27,7 @@ export default function PluginDetailModal ({ isOpen, onClose, plugin, installedV
         <dl className='grid grid-cols-[auto_1fr] gap-x-5 gap-y-3'>
           <dt className='text-default-500'>状态</dt><dd>{pluginAvailabilityLabel(plugin)}</dd>
           <dt className='text-default-500'>插件 ID</dt><dd className='font-mono break-all'>{plugin.id}</dd>
-          <dt className='text-default-500'>目录版本</dt><dd>{plugin.version || '未记录'}（不代表最新）</dd>
+          {plugin.availability !== 'local' && <><dt className='text-default-500'>目录版本</dt><dd>{plugin.version || '未记录'}（不代表最新）</dd></>}
           {installedVersion && <><dt className='text-default-500'>本机版本</dt><dd>{installedVersion}</dd></>}
           <dt className='text-default-500'>作者</dt><dd>{plugin.author || '未标注'}</dd>
           <dt className='text-default-500'>目录来源</dt><dd>{plugin.sourceName || '服务端目录'}</dd>

@@ -11,6 +11,6 @@ export default function PureLayout ({ children }: { children: React.ReactNode; }
       <div className='flex items-center gap-5'><a className='console-auth-source' href={siteConfig.links.github} target='_blank' rel='noreferrer'>项目源码<LuArrowUpRight size={15} /></a><ThemeSwitch /></div>
     </header>
     <main className='console-auth-main'>{children}</main>
-    <footer className='console-auth-footer'><span><LuShieldCheck size={14} />凭据仅发送至当前服务</span><span>Napcat-Plus · 基于 NapCat</span></footer>
+    <footer className='console-auth-footer'><span><LuShieldCheck size={14} />你的凭据只会提交给当前服务，用于本次验证，不会用于其他用途</span><span>Napcat-Plus · 基于 NapCat</span></footer>
   </div>;
 }

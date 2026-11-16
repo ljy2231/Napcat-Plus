@@ -25,7 +25,7 @@ export default function PluginStoreCard ({ data, onViewDetail, installedVersion 
     <div><h2 className='font-semibold text-base'>{data.name}</h2><p className='text-xs text-default-500 mt-1'>{data.author || '来源未标注'}</p></div>
     <p className='text-sm text-default-600 leading-relaxed flex-1'>{data.description}</p>
     <div className='text-xs space-y-2 text-default-500'>
-      <p>{data.availability === 'builtin' ? '内置实现版本' : '目录记录版本'}：{data.version || '未记录'}</p>
+      {data.availability !== 'local' && <p>{data.availability === 'builtin' ? '内置实现版本' : '目录记录版本'}：{data.version || '未记录'}</p>}
       {installedVersion && <p>本机已安装：{installedVersion}（不自动判断更新）</p>}
       {data.availabilityReason && <p className='leading-relaxed'>{data.availabilityReason}</p>}
     </div>

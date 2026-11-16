@@ -26,9 +26,29 @@ export default function WebLoginPage () {
   const abort = useRef<AbortController | null>(null);
   const submitting = useRef(false);
   const mounted = useRef(true);
+  const successTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const completing = useRef(false);
+  const [success, setSuccess] = useState(false);
+
+  const finishLogin = (credential: string) => {
+    if (completing.current) return;
+    completing.current = true;
+    // Do not keep a bootstrap token in the address bar during the transition.
+    const url = new URL(window.location.href);
+    if (url.searchParams.has('token')) { url.searchParams.delete('token'); window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash); }
+    setCredential(credential);
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      navigate('/', { replace: true }); return;
+    }
+    setSuccess(true);
+    successTimer.current = setTimeout(() => {
+      if (!mounted.current) return;
+      navigate('/', { replace: true });
+    }, 1100);
+  };
 
   const submit = async (inputToken = token, code?: string) => {
-    if (submitting.current) return;
+    if (submitting.current || completing.current) return;
     if (!inputToken.trim()) { setError('请输入管理 Token。'); return; }
     if (require2FA && (!code || !/^\d{6}$/.test(code))) { setError('请输入验证器中的 6 位验证码。'); return; }
     abort.current?.abort();
@@ -38,15 +58,13 @@ export default function WebLoginPage () {
       if (!mounted.current) return;
       if (data?.require2FA) { setRequire2FA(true); setPendingToken(inputToken); return; }
       if (!data?.Credential) throw new Error('服务未返回有效的管理凭据，请重试。');
-      setCredential(data.Credential);
-      // Remove bootstrap tokens from browser history after successful auth.
-      navigate('/', { replace: true });
+      finishLogin(data.Credential);
     } catch (cause) { if (mounted.current) setError((cause as Error).message); }
     finally { submitting.current = false; if (mounted.current) setLoading(false); }
   };
 
   const passkey = async () => {
-    if (abort.current || loading || passkeyLoading) return;
+    if (abort.current || loading || passkeyLoading || completing.current) return;
     if (!navigator.credentials?.get) { setError('当前浏览器或连接环境不支持 Passkey，请使用 Token 登录。'); return; }
     const controller = new AbortController(); abort.current = controller;
     const timer = setTimeout(() => controller.abort(), PASSKEY_TIMEOUT_MS);
@@ -70,7 +88,7 @@ export default function WebLoginPage () {
       });
       if (controller.signal.aborted || !mounted.current) return;
       if (!data?.Credential) throw new Error('Passkey 验证未返回管理凭据。');
-      setCredential(data.Credential); navigate('/', { replace: true });
+      finishLogin(data.Credential);
     } catch (cause) {
       if (mounted.current && !submitting.current) setError(controller.signal.aborted ? 'Passkey 验证超时或已取消，可以使用 Token 继续。' : (cause as Error).message);
     } finally {
@@ -83,7 +101,7 @@ export default function WebLoginPage () {
   useEffect(() => {
     mounted.current = true;
     if (initialToken.current) void submit(initialToken.current);
-    return () => { mounted.current = false; abort.current?.abort(); };
+    return () => { mounted.current = false; abort.current?.abort(); if (successTimer.current) clearTimeout(successTimer.current); };
   }, []);
 
   return <>
@@ -92,7 +110,7 @@ export default function WebLoginPage () {
       <div className='console-auth-grid'>
         <section className='console-auth-story'>
           <span className='console-eyebrow'>YOUR BOT, UNDER CONTROL</span>
-          <h1>让每一次连接，<br /><span>清晰可见。</span></h1>
+          <h1 aria-label='让每一次连接，清晰可见。'><span className='console-auth-type-line console-auth-type-first' aria-hidden='true'>让每一次连接，</span><span className='console-auth-type-line console-auth-type-second' aria-hidden='true'>清晰可见。</span></h1>
           <p>从 QQ 登录到 GSCore 消息桥接，在一个清晰、可靠的控制台中管理你的机器人。</p>
           <div className='console-auth-features'>
             <div className='console-auth-feature'><LuLayoutDashboard /><div><strong>一个工作空间</strong><p>连接、日志、插件与文件管理，保留熟悉的能力。</p></div></div>
@@ -100,7 +118,13 @@ export default function WebLoginPage () {
             <div className='console-auth-feature'><LuShieldCheck /><div><strong>凭据安全优先</strong><p>沿用服务端鉴权，支持 Passkey 与两步验证。</p></div></div>
           </div>
         </section>
-        <section className='console-auth-card' aria-labelledby='auth-heading'>
+        <section className={`console-auth-card${success ? ' is-auth-success' : ''}`} aria-labelledby={success ? undefined : 'auth-heading'}>
+          {success ? <div className='console-auth-terminal' role='status' aria-live='polite'>
+            <div className='console-auth-terminal-header'><span>NAPCAT-PLUS / AUTH</span><span className='console-auth-terminal-dot' /></div>
+            <div className='console-auth-terminal-line'>&gt; AUTH SUCCESS <span>[ OK ]</span></div>
+            <div className='console-auth-terminal-line'>&gt; SESSION ESTABLISHED <span>[ OK ]</span></div>
+            <div className='console-auth-terminal-message'>连接已建立，正在进入控制台<span className='console-auth-terminal-cursor'>_</span></div>
+          </div> : <>
           <span className='console-eyebrow'>SECURE ACCESS</span>
           <h2 id='auth-heading'>{require2FA ? '两步验证' : '登录管理控制台'}</h2>
           <p className='console-auth-card-subtitle'>{require2FA ? '请输入验证器应用中的动态验证码，完成本次管理登录。' : '使用启动日志中的 WebUI Token 登录。这不是你的 QQ 密码。'}</p>
@@ -116,6 +140,7 @@ export default function WebLoginPage () {
             {passkeyLoading && <p className='mt-3 text-xs text-default-500' role='status'>等待设备验证，最多 30 秒。也可直接使用 Token。</p>}
           </>}
           <p className='mt-6 text-[11px] text-default-500 leading-relaxed'>请仅在可信设备上登录。管理凭据可以访问机器人配置和文件，切勿公开分享。</p>
+          </>}
         </section>
       </div>
     </PureLayout>
