@@ -42,7 +42,7 @@ function VersionInfo () {
           )
           : (
             <div className='flex items-center gap-2'>
-              <Chip size='sm' color='default' variant='flat' className='text-default-500'>Console {consoleVersion.error ? '未知' : consoleVersion.data?.version || '读取中'}</Chip>
+              <Chip size='sm' color='default' variant='flat' className='text-default-500'>Napcat-Plus {consoleVersion.error ? '未知' : consoleVersion.data?.version || '读取中'}</Chip>
               <Chip size='sm' color='primary' variant='flat'>NapCat Core {data?.version}</Chip>
             </div>
           )}
@@ -192,7 +192,7 @@ export default function AboutPage () {
   ];
 
   const links = [
-    { icon: <BsGithub />, name: 'QQ Bot Console 项目', href: 'https://github.com/ljy2231/qq-bot-console' },
+    { icon: <BsGithub />, name: 'Napcat-Plus 项目', href: 'https://github.com/ljy2231/Napcat-Plus' },
     { icon: <BsGithub />, name: 'NapCat 上游项目', href: 'https://github.com/NapNeko/NapCatQQ' },
     { icon: <BsTelegram />, name: 'Telegram', href: 'https://t.me/napcatqq' },
     { icon: <BsTencentQq />, name: '交流群 欢乐一家亲', href: 'https://qm.qq.com/q/VwpnklcXqo' },
@@ -206,7 +206,7 @@ export default function AboutPage () {
 
   return (
     <div className='flex flex-col h-full w-full gap-6 p-2 md:p-6'>
-      <title>关于与版本 · QQ Bot Console</title>
+      <title>关于与版本 · Napcat-Plus</title>
 
       {/* 头部标题区 */}
       <div className='flex flex-col gap-2'>
@@ -232,7 +232,7 @@ export default function AboutPage () {
             </CardHeader>
             <CardBody className='py-4 text-default-600 leading-relaxed space-y-2'>
               <p>
-                QQ Bot Console 是基于 NapCat 的独立增强版，提供中文优先的管理界面、GSCore 连接管理与运行诊断。
+                Napcat-Plus 是基于 NapCat 的独立增强版，提供中文优先的管理界面、GSCore 连接管理与运行诊断。
                 底层 QQ / OneBot 能力来自 NapCat，保留上游来源与版权声明。
               </p>
               <p>
@@ -308,7 +308,7 @@ export default function AboutPage () {
       {/* 底部版权 - 移出 grid 布局 */}
       <div className='w-full text-center text-tiny text-default-400 py-4 mt-auto flex flex-col items-center gap-1'>
         <p className='flex items-center justify-center gap-1'>
-          QQ Bot Console · 基于 NapCat / NextNapCatWebUI
+          Napcat-Plus · 基于 NapCat / NextNapCatWebUI
         </p>
         <p>原作者版权与第三方许可均予保留，详见仓库 LICENSE 与说明。</p>
       </div>

@@ -1,4 +1,4 @@
-name: QQ Bot Console CI
+name: Napcat-Plus CI
 
 on:
   push:
@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      NAPCAT_VERSION: 4.18.42+console.0.1.0
+      NAPCAT_VERSION: 4.18.42+napcat-plus.0.1.0
     steps:
       - uses: actions/checkout@v5
         with:
@@ -39,7 +39,7 @@ jobs:
       - run: pnpm run build:plugin-builtin
       - uses: actions/upload-artifact@v6
         with:
-          name: QQBotConsole.Shell
+          name: Napcat-Plus.Shell
           path: packages/napcat-shell/dist
           retention-days: 14
           if-no-files-found: error

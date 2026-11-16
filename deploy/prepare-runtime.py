@@ -18,4 +18,4 @@ with ZipFile(archive, 'w', ZIP_DEFLATED) as output:
     for file in sorted(root.rglob('*')):
         if file.is_file():
             output.write(file, file.relative_to(root).as_posix())
-print('Prepared QQ Bot Console runtime and first-start archive')
+print('Prepared Napcat-Plus runtime and first-start archive')

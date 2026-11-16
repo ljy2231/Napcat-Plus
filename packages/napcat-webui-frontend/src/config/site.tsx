@@ -26,7 +26,7 @@ export interface MenuItem {
 }
 
 export const siteConfig = {
-  name: 'QQ Bot Console',
+  name: 'Napcat-Plus',
   description: '中文优先的 QQ 机器人管理控制台。',
   navItems: [
     {
@@ -101,7 +101,7 @@ export const siteConfig = {
     },
   ] as MenuItem[],
   links: {
-    github: 'https://github.com/ljy2231/qq-bot-console',
-    docs: 'https://github.com/ljy2231/qq-bot-console#readme',
+    github: 'https://github.com/ljy2231/Napcat-Plus',
+    docs: 'https://github.com/ljy2231/Napcat-Plus#readme',
   },
 };

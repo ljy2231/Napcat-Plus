@@ -19,7 +19,7 @@ export default function DashboardIndexPage () {
   const login = loginPresentation(current?.login);
   const gs = gscorePresentation(current?.gscore.state);
   return <>
-    <title>总览仪表盘 · QQ Bot Console</title>
+    <title>总览仪表盘 · Napcat-Plus</title>
     <ConsolePageHeader eyebrow='WORKSPACE OVERVIEW' title='总览仪表盘' description='连接状态、运行诊断与常用操作，在一个工作空间中掌握。' actions={<Button variant='bordered' size='sm' isLoading={loading} startContent={!loading && <LuRefreshCw size={15} />} onPress={refresh}>刷新状态</Button>} />
     {error && <ApiError error={error} onRetry={refresh} />}
     {loading && !data && <ConsoleLoading />}
@@ -27,7 +27,7 @@ export default function DashboardIndexPage () {
       <div className='console-stat'><div className='console-stat-heading'><span>QQ 账号状态</span><LuBot /></div><div className='console-stat-value'>{current ? login.label : '—'}</div><div className='console-stat-foot'><StatusBadge tone={current ? login.tone : 'neutral'}>{current?.login.coreReady ? '核心服务就绪' : current ? '等待核心就绪' : '状态待获取'}</StatusBadge></div></div>
       <div className='console-stat'><div className='console-stat-heading'><span>GSCore 连接</span><LuCable /></div><div className='console-stat-value'>{current ? gs.label : '—'}</div><div className='console-stat-foot'>{current ? (current.gscore.enabled ? `本轮重试 ${current.gscore.reconnectAttempts} 次` : '在连接管理中配置并启用') : '等待真实连接状态'}</div></div>
       <div className='console-stat'><div className='console-stat-heading'><span>本次运行时长</span><LuClock3 /></div><div className='console-stat-value'>{formatUptime(current?.uptime)}</div><div className='console-stat-foot'>服务端进程运行时间 · 每 5 秒更新</div></div>
-      <div className='console-stat'><div className='console-stat-heading'><span>当前版本</span><LuServer /></div><div className='console-stat-value'>{current?.version || '—'}</div><div className='console-stat-foot'>QQ Bot Console · NapCat 核心</div></div>
+      <div className='console-stat'><div className='console-stat-heading'><span>当前版本</span><LuServer /></div><div className='console-stat-value'>{current?.version || '—'}</div><div className='console-stat-foot'>Napcat-Plus · NapCat 核心</div></div>
     </div>
     <div className='console-content-grid'>
       <div className='flex flex-col gap-5'>

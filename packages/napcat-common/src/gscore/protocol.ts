@@ -92,7 +92,7 @@ export function fromGScoreMessage (message: unknown, selfId: string): ActionRequ
     const first = object(content[0]);
     if (first?.['type'] === 'node') {
       if (!Array.isArray(first['data']) || first['data'].length === 0 || first['data'].length > 100) throw new Error('合并转发无效');
-      const nodes = first['data'].map((child) => ({ type: 'node', data: { user_id: selfId, nickname: 'QQ Bot Console', content: toSegments([child]) } }));
+      const nodes = first['data'].map((child) => ({ type: 'node', data: { user_id: selfId, nickname: 'Napcat-Plus', content: toSegments([child]) } }));
       return { action: group ? 'send_group_forward_msg' : 'send_private_forward_msg', params: { ...target, messages: nodes } };
     }
     if (first?.['type'] === 'file') {

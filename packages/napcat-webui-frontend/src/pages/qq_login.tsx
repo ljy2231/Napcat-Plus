@@ -344,7 +344,7 @@ export default function QQLoginPage () {
 
   return (
     <>
-      <title>QQ 登录状态 · QQ Bot Console</title>
+      <title>QQ 登录状态 · Napcat-Plus</title>
       <PureLayout>
         <div className='console-login-workspace'>
           <ConsolePageHeader eyebrow='ACCOUNT CONNECTION' title='连接你的 QQ 账号' description='管理登录已完成。继续登录 QQ，或先返回控制台配置其他服务。' actions={<Button variant='bordered' size='sm' startContent={<LuArrowLeft />} onPress={() => navigate('/')}>返回控制台</Button>} />

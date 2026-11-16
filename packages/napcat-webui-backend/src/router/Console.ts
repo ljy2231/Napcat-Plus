@@ -32,7 +32,7 @@ router.get('/status', (_, res) => {
     if (gscore.lastError) diagnostics.push({ level: 'warning', title: 'GSCore 连接诊断', detail: gscore.lastError });
     if (gscore.enabled) diagnostics.push({ level: 'info', title: '避免重复桥接', detail: '已启用内置 GSCore；请停用旧的 GSCore 适配插件，避免重复收发。Docker 中请使用同网络服务名，不要把 localhost 当作其他容器。' });
     if (!diagnostics.length) diagnostics.push({ level: 'info', title: '核心运行正常', detail: '当前没有登录错误；GSCore 可在连接管理页面按需启用。' });
-    return sendSuccess(res, { product: 'QQ Bot Console', version: consoleVersion, uptime: Math.floor(process.uptime()), login, gscore, diagnostics });
+    return sendSuccess(res, { product: 'Napcat-Plus', version: consoleVersion, uptime: Math.floor(process.uptime()), login, gscore, diagnostics });
   } catch { return sendError(res, '控制台状态尚未就绪'); }
 });
 

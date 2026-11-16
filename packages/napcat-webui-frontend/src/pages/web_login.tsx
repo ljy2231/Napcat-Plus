@@ -87,7 +87,7 @@ export default function WebLoginPage () {
   }, []);
 
   return <>
-    <title>管理登录 · QQ Bot Console</title>
+    <title>管理登录 · Napcat-Plus</title>
     <PureLayout>
       <div className='console-auth-grid'>
         <section className='console-auth-story'>
@@ -105,7 +105,7 @@ export default function WebLoginPage () {
           <h2 id='auth-heading'>{require2FA ? '两步验证' : '登录管理控制台'}</h2>
           <p className='console-auth-card-subtitle'>{require2FA ? '请输入验证器应用中的动态验证码，完成本次管理登录。' : '使用启动日志中的 WebUI Token 登录。这不是你的 QQ 密码。'}</p>
           <form className='flex flex-col gap-5' onSubmit={(event) => { event.preventDefault(); void submit(require2FA ? pendingToken : token, require2FA ? totp : undefined); }}>
-            <input className='sr-only' aria-label='管理账号' type='text' name='username' value='qq-bot-console' readOnly autoComplete='username' tabIndex={-1} />
+            <input className='sr-only' aria-label='管理账号' type='text' name='username' value='napcat-plus' readOnly autoComplete='username' tabIndex={-1} />
             {require2FA ? <Input autoFocus type='text' inputMode='numeric' pattern='[0-9]{6}' maxLength={6} autoComplete='one-time-code' label='动态验证码' labelPlacement='outside' placeholder='输入 6 位验证码' variant='bordered' size='lg' value={totp} onValueChange={(value) => setTotp(value.replace(/\D/g, ''))} isDisabled={loading} /> : <Input type='password' name='password' autoComplete='current-password' label='管理 Token' labelPlacement='outside' placeholder='输入你的 WebUI Token' variant='bordered' size='lg' value={token} onValueChange={setToken} isDisabled={loading} startContent={<LuKeyRound className='text-default-400' />} />}
             {error && <p className='text-danger text-xs leading-relaxed break-words' role='alert'>{error}</p>}
             <Button type='submit' size='lg' color='primary' isLoading={loading} endContent={!loading && <LuArrowRight />}>{require2FA ? '验证并进入控制台' : '进入控制台'}</Button>

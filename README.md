@@ -1,4 +1,4 @@
-# QQ Bot Console
+# Napcat-Plus
 
 基于 NapCatQQ 最后保留的完整源码，面向自托管 QQ 机器人的增强控制台。重点是**可诊断的登录流程、内置 GSCore 连接管理、清晰的 WebUI 和可重复部署**，不是只更换名称的上游镜像。
 
@@ -88,17 +88,23 @@ docker compose --env-file deploy/.env -f deploy/compose.yaml up -d --build
 
 ### 连接 GSCore
 
-将 GSCore 和 Console 加入同一个 Docker 网络，在控制台填写 `ws://<GSCore服务名>:8765`。如果 GSCore 使用 `network_mode: service:...` 或共享代理容器网络，应填那个网络容器的服务名。`localhost` 指当前 Console 容器，不是宿主机或另一个容器。无需为容器间通信开放公网端口。
+将 GSCore 和 Napcat-Plus 加入同一个 Docker 网络，在控制台填写 `ws://<GSCore服务名>:8765`。如果 GSCore 使用 `network_mode: service:...` 或共享代理容器网络，应填那个网络容器的服务名。`localhost` 指当前 Napcat-Plus 容器，不是宿主机或另一个容器。无需为容器间通信开放公网端口。
 
 仅保存地址不代表连通：QQ 登录后看连接状态与诊断结果。GSCore 服务本身不由示例 Compose 自动安装，避免未经确认引入不固定的镜像或修改已有服务。
 
 ## 自动构建与发布
 
 - 分支推送/PR：只读权限运行 CI，不使用 `pull_request_target` 执行不可信代码。
-- 推送 `v*` 标签：构建并推送 `ghcr.io/ljy2231/qq-bot-console`。
+- 推送 `v*` 标签：构建并推送 `ghcr.io/ljy2231/napcat-plus`。
 - 手动镜像构建默认不发布；选择 `publish` 后才推送。首次 GHCR 包的可见性可在 GitHub Packages 中设置。
 - GHCR 只使用该仓库 `GITHUB_TOKEN`，不需要把个人 Token 写入代码或工作流。
 - 本地构建可覆盖 `QQ_RUNTIME` 参数，但必须重新验证对应 QQ 版本兼容性。
+
+## 从旧名称升级
+
+项目现名为 **Napcat-Plus**，仓库地址为 [ljy2231/Napcat-Plus](https://github.com/ljy2231/Napcat-Plus)。npm/Docker 标识使用小写 `napcat-plus`。
+
+如果曾使用旧名称的示例 Compose 部署，请在私有 `.env` 中继续设置 `COMPOSE_PROJECT_NAME=qq-bot-console`、`BOT_NETWORK=qq-bot-network`，以复用原持久化卷和网络；不要只更换项目名就启动第二套空数据实例。新安装使用示例中的 `napcat-plus` 默认值。内部 API、配置文件名及 GSCore 连接身份保留兼容，不因更名迁移账号数据。
 
 ## 升级与回滚
 
@@ -110,6 +116,6 @@ docker compose --env-file deploy/.env -f deploy/compose.yaml up -d --build
 
 - 不要提交 `.env`、QQ 数据库、日志、二维码、用户插件 Token 或容器 inspect。
 - 构建上下文与 Git ignore 已排除常见运行数据；发布前仍应审查暂存区。
-- 默认在线更新禁用；显式设 `QQ_BOT_CONSOLE_PINNED=0` 会恢复旧更新逻辑，但可能覆盖此分支，不建议使用。
+- 默认在线更新禁用；显式设 `NAPCAT_PLUS_PINNED=0`（兼容旧变量 `QQ_BOT_CONSOLE_PINNED`）会恢复旧更新逻辑，但可能覆盖此分支，不建议使用。
 - 网络故障、风控和其他插件故障不在“永久修复”的保证范围内。
 - 测试结果、已知限制与变更范围见 [改造说明](<docs/console-changes.md>)。

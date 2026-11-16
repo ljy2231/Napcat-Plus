@@ -1,7 +1,7 @@
-name: qq-bot-console
+name: ${COMPOSE_PROJECT_NAME:-napcat-plus}
 services:
   console:
-    image: qq-bot-console:0.1.0
+    image: napcat-plus:0.1.0
     build:
       context: ..
       dockerfile: deploy/Dockerfile
@@ -9,7 +9,7 @@ services:
     environment:
       TZ: Asia/Shanghai
       WEBUI_TOKEN: ${WEBUI_TOKEN:?Set a strong WEBUI_TOKEN in your private .env file}
-      QQ_BOT_CONSOLE_PINNED: "1"
+      NAPCAT_PLUS_PINNED: "1"
     ports:
       # Localhost by default. Use SSH forwarding or an authenticated TLS proxy.
       - "${BIND_HOST:-127.0.0.1}:${WEBUI_PORT:-6099}:6099"
@@ -23,7 +23,7 @@ services:
 
 networks:
   bot-network:
-    name: ${BOT_NETWORK:-qq-bot-network}
+    name: ${BOT_NETWORK:-napcat-plus-network}
 
 volumes:
   qq-data:

@@ -106,7 +106,7 @@ export default function WSDebug () {
 
   return (
     <>
-      <title>消息与实时调试 · QQ Bot Console</title>
+      <title>消息与实时调试 · Napcat-Plus</title>
       <div className='h-[calc(100vh-4rem)] overflow-hidden flex flex-col p-2 md:p-4 gap-2 md:gap-4'>
         {/* Config Card */}
         <Card className={clsx(

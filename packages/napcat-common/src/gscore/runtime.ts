@@ -34,6 +34,7 @@ export class GScoreRuntime {
     const binding = ++this.bindingGeneration;
     let pending = 0;
     let chain = Promise.resolve();
+    // Preserve the established wire identity across the Napcat-Plus rename.
     this.connection = new GScoreConnection(this.config, `qq-bot-console-${selfId}`, async (data) => {
       if (pending >= 100) throw new Error('GSCore 队列已满');
       pending++;

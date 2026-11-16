@@ -64,7 +64,7 @@ export default function GSCorePage () {
   });
 
   return <>
-    <title>GSCore 连接 · QQ Bot Console</title>
+    <title>GSCore 连接 · Napcat-Plus</title>
     <ConsolePageHeader eyebrow='INTEGRATIONS / GSCORE' title='GSCore 连接管理' description='管理消息桥接、鉴权与重试策略。配置保存在服务端，不回显已存 Token。' actions={<Button size='sm' variant='bordered' onPress={status.refresh} isLoading={status.loading} startContent={<LuRefreshCw />}>刷新状态</Button>} />
     {status.error && <ApiError error={status.error} onRetry={status.refresh} />}
     {config.error && <ApiError error={config.error} onRetry={config.refresh} />}

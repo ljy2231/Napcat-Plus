@@ -2,9 +2,9 @@
 
 核对日期：2026-11-16。
 
-## 本次结论：不随 qq-bot-console 内置分发
+## 本次结论：不随 Napcat-Plus 内置分发
 
-**qq-bot-console 本次没有打包 SSQQ 的插件入口、预构建 Web 文件或第三方资源，也没有添加自动下载/复制 SSQQ 的构建步骤。**
+**Napcat-Plus 本次没有打包 SSQQ 的插件入口、预构建 Web 文件或第三方资源，也没有添加自动下载/复制 SSQQ 的构建步骤。**
 
 当前使用保留的 OneBot「消息与聊天/调试」能力作为替代，前端路由为 `/debug/ws`。它不是 SSQQ，也不声称具备 SSQQ 全部客户端功能。
 
@@ -88,13 +88,13 @@ b14b0d99e114df68d659292deb7572666f174bd87a4ec04119e942e62a15d431  index.mjs
 
 ### 默认替代
 
-使用 qq-bot-console 保留的 `/debug/ws` 消息与聊天/调试页面。该页面不依赖 SSQQ 资源。
+使用 Napcat-Plus 保留的 `/debug/ws` 消息与聊天/调试页面。该页面不依赖 SSQQ 资源。
 
 ### 独立部署
 
 用户可从[官方 v3.5.2 发布页](https://github.com/Stapxs/Stapxs-QQ-Lite-2.0/releases/tag/v3.5.2)取得独立 Web 包，按[官方部署说明](https://github.com/Stapxs/Stapxs-QQ-Lite-2.0/blob/0afd7f1ff1dee7933a1e344cce4700e05cd096d6/README.md)独立部署并自行配置 OneBot 连接。
 
-建议给独立客户端使用单独、最小权限的连接凭据；不要将 qq-bot-console 的 WebUI 凭据拼入外部链接。
+建议给独立客户端使用单独、最小权限的连接凭据；不要将 Napcat-Plus 的 WebUI 凭据拼入外部链接。
 
 ### 用户手动安装官方插件
 

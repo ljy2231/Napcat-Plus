@@ -7,7 +7,7 @@ import type { StatusTone } from '@/utils/console';
 export function ConsoleBrand ({ compact = false }: { compact?: boolean; }) {
   return <div className='console-brand'>
     <span className='console-brand-mark' aria-hidden='true'><LuBot size={23} /></span>
-    <div><strong>QQ Bot Console</strong>{!compact && <span>连接 · 管理 · 观察</span>}</div>
+    <div><strong>Napcat-Plus</strong>{!compact && <span>连接 · 管理 · 观察</span>}</div>
   </div>;
 }
 

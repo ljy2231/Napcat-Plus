@@ -102,7 +102,7 @@ function PluginDiagnostics () {
 
 export default function ToolsPage () {
   return <>
-    <title>内置工具 · QQ Bot Console</title>
+    <title>内置工具 · Napcat-Plus</title>
     <ConsolePageHeader eyebrow='BUILT-IN UTILITIES' title='内置工具' description='常用能力直接可达。清理与插件操作默认不自动执行，由你掌控。' />
     <div className='console-content-grid'>
       <div className='flex flex-col gap-5'><CacheCleaner /><PluginDiagnostics /></div>

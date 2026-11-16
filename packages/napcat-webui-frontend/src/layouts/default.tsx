@@ -46,7 +46,7 @@ export default function Layout ({ children }: { children: React.ReactNode; }) {
       <main id='console-main' className='console-main' tabIndex={-1}>
         <ErrorBoundary fallbackRender={errorFallbackRender} resetKeys={[location.pathname]}>{children}</ErrorBoundary>
       </main>
-      <footer className='console-workspace-footer'><span>QQ Bot Console</span><span>基于 NapCat · 独立增强版</span></footer>
+      <footer className='console-workspace-footer'><span>Napcat-Plus</span><span>基于 NapCat · 独立增强版</span></footer>
     </div>
   </div>;
 }

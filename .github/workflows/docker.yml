@@ -1,4 +1,4 @@
-name: Build Console Image
+name: Build Napcat-Plus Image
 
 on:
   push:
