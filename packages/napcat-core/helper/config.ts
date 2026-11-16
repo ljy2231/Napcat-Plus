@@ -51,6 +51,7 @@ export function loadNapcatConfig (configPath: string): NapcatConfig {
 
 export class NapCatConfigLoader extends ConfigBase<NapcatConfig> {
   constructor (core: NapCatCore, configPath: string, schema: TSchema) {
-    super('napcat', core, configPath, schema);
+    // Runtime/system settings are instance-wide, not per QQ account.
+    super('napcat', core, configPath, schema, true);
   }
 }

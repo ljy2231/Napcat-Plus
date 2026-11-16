@@ -7,6 +7,7 @@ export * from './config';
 
 export class OB11ConfigLoader extends ConfigBase<OneBotConfig> {
   constructor (core: NapCatCore, configPath: string, schema: TSchema) {
-    super('onebot11', core, configPath, schema);
+    // OneBot network settings are instance-wide: one config for every QQ account.
+    super('onebot11', core, configPath, schema, true);
   }
 }

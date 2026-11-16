@@ -8,6 +8,7 @@ import PageLoading from '@/components/page_loading';
 import SwitchCard from '@/components/switch_card';
 
 import useConfig from '@/hooks/use-config';
+import { SHARED_SCOPE_HINT, sharedStatusToast } from '@/utils/shared-config';
 
 const OneBotConfigCard = () => {
   const { config, saveConfigWithoutNetwork, refreshConfig } = useConfig();
@@ -46,8 +47,11 @@ const OneBotConfigCard = () => {
 
   const onSubmit = handleOnebotSubmit(async (data) => {
     try {
-      await saveConfigWithoutNetwork(data);
-      toast.success('保存成功');
+      const { status } = await saveConfigWithoutNetwork(data);
+      const feedback = sharedStatusToast(status);
+      if (feedback.kind === 'success') toast.success(feedback.text);
+      else if (feedback.kind === 'warning') toast(feedback.text, { icon: '⚠️' });
+      else toast.error(feedback.text);
     } catch (error) {
       const msg = (error as Error).message;
       toast.error(`保存失败: ${msg}`);
@@ -79,7 +83,8 @@ const OneBotConfigCard = () => {
 
   return (
     <>
-      <title>OneBot配置 - NapCat WebUI</title>
+      <title>OneBot配置 - NapCat Plus</title>
+      <p className='text-xs text-default-500 mb-1'>{SHARED_SCOPE_HINT} 未登录 QQ 也可编辑，保存后在下次登录或重启时生效。</p>
       <Controller
         control={control}
         name='musicSignUrl'

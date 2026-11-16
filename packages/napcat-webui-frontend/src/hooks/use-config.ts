@@ -166,9 +166,9 @@ const useConfig = () => {
 
   const saveConfigWithoutNetwork = async (newConfig: OneBotConfig) => {
     newConfig.network = config.network;
-    await QQManager.setOB11Config(newConfig);
+    const status = await QQManager.setOB11Config(newConfig);
     dispatch(storeUpdateConfig(newConfig));
-    return newConfig;
+    return { config: newConfig, status };
   };
 
   return {

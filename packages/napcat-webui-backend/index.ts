@@ -28,6 +28,7 @@ import { napCatVersion } from 'napcat-common/src/version';
 import { fileURLToPath } from 'node:url';
 import { NapCatOneBot11Adapter } from '@/napcat-onebot/index';
 import { OB11PluginMangerAdapter } from '@/napcat-onebot/network/plugin-manger';
+import { createWebUiStaticRouter, webUiBuildFingerprint } from '@/napcat-webui-backend/src/helper/WebUiStatic';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -322,7 +323,9 @@ export async function InitWebUi (logger: ILogWrapper, pathWrapper: NapCatPathWra
       // 替换版本号
       // 使用 napCatVersion，如果为 alpha 则尝试加上时间戳或其他标识以避免缓存冲突，或者直接使用
       // 用户要求控制 sw.js 版本，napCatVersion 是核心控制点
-      swContent = swContent.replace('{{VERSION}}', napCatVersion);
+      // Include the built index hash so a rebuild with the same version still
+      // rotates the cache and drops stale chunk references.
+      swContent = swContent.replace('{{VERSION}}', `${napCatVersion}-${webUiBuildFingerprint(pathWrapper.staticPath)}`);
 
       res.header('Content-Type', 'application/javascript');
       res.header('Service-Worker-Allowed', '/webui/');
@@ -338,9 +341,9 @@ export async function InitWebUi (logger: ILogWrapper, pathWrapper: NapCatPathWra
 
   // ------------挂载路由------------
   // 挂载静态路由（前端），路径为 /webui
-  app.use('/webui', express.static(pathWrapper.staticPath, {
-    maxAge: '1d',
-  }));
+  // HTML is never cached long-term and a missing asset returns 404 instead of the
+  // SPA entrypoint (previously a stale page got HTML for a removed .js chunk).
+  app.use('/webui', createWebUiStaticRouter(pathWrapper.staticPath));
 
   // 插件内存静态资源路由（不需要鉴权）
   // 路径格式: /plugin/:pluginId/mem/:urlPath/*
@@ -482,12 +485,8 @@ export async function InitWebUi (logger: ILogWrapper, pathWrapper: NapCatPathWra
   });
   // 挂载API接口
   app.use('/api', ALLRouter);
-  // 所有剩下的请求都转到静态页面
-  const indexFile = join(pathWrapper.staticPath, 'index.html');
-
-  app.all(/\/webui\/(.*)/, (_req, res) => {
-    res.sendFile(indexFile);
-  });
+  // /webui/* SPA fallback is handled inside createWebUiStaticRouter, which keeps
+  // asset requests from being answered with HTML.
 
   // 初始服务（先放个首页）
   app.all('/', (_req, res) => {

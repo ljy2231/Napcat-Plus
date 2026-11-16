@@ -62,3 +62,17 @@ pnpm run build:shell
 - QQ 原生组件由固定上游运行时提供；来源可追踪但不是本项目可独立重编译的腾讯组件。
 - 登录修复不绕过QQ验证、风控或平台限制，不保证未来协议兼容。
 - 未代用户发送QQ业务消息，不以WebSocket连接成功替代全部机器人指令验收。
+
+## 实例级配置与静态资源（0.2.0-preview.3）
+
+**配置不再绑定 QQ 账号。** OneBot 网络配置与分析系统配置对同一实例内所有账号共用：
+
+- 规范文件为 `onebot11.json` / `napcat.json`；旧的 `onebot11_<QQ>.json`、`napcat_<QQ>.json` 仅在首次迁移时被读取复制，原文件保留。
+- 未登录 QQ 也可读取和保存，保存后返回 `{scope:'global', application:'applied'|'pending'|'failed'}`。在线时 OneBot 设置立即应用，系统设置需重启才生效。
+- 已存在全局文件时不会被账号文件覆盖；多份账号文件且无账号上下文时拒绝猜测，仅使用默认值且不写入。
+- 旧 per-account 接口保留为别名，避免旧前端分裂数据。
+- OneBot schema 统一为一份，修复 WebUI 保存时丢失 `verifyCertificate` 的问题。
+
+**旧构建资源加载失败：** 之前 `/webui/` 与 `index.html` 被缓存一天，且不存在的 `.js` 会回退成 HTML 200。现在 HTML 为 `no-store`、带 hash 资源为 immutable、缺失资源返回 404 `text/plain`，Service Worker 不再把「脚本请求返回 HTML」当作可缓存资源，并以构建指纹命名缓存。前端遇到 chunk 加载失败时显示明确的刷新提示，绝不自动刷新或清除管理凭据。
+
+**升级注意事项：** 若实例已有账号独立配置且全局文件是模板，需在升级前明确选择把当前账号配置提升为全局（本次生产升级已备份 `onebot11.json`/`napcat.json` 与账号文件后执行）。

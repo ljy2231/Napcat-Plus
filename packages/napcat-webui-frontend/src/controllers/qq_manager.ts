@@ -1,5 +1,6 @@
 import { AxiosRequestConfig } from 'axios';
 import { serverRequest } from '@/utils/request';
+import { parseSharedStatus, type SharedConfigStatus } from '@/utils/shared-config';
 
 import { SelfInfo } from '@/types/user';
 
@@ -13,9 +14,10 @@ export default class QQManager {
   }
 
   public static async setOB11Config (config: OneBotConfig) {
-    await serverRequest.post<ServerResponse<null>>('/OB11Config/SetConfig', {
+    const { data } = await serverRequest.post<ServerResponse<Partial<SharedConfigStatus>>>('/OB11Config/SetConfig', {
       config: JSON.stringify(config),
     });
+    return parseSharedStatus(data.data);
   }
 
   public static async checkQQLoginStatus () {
@@ -326,10 +328,11 @@ export default class QQManager {
   }
 
   public static async setNapCatConfig (config: Partial<NapCatConfig>) {
-    await serverRequest.post<ServerResponse<null>>(
+    const { data } = await serverRequest.post<ServerResponse<Partial<SharedConfigStatus>>>(
       '/NapCatConfig/SetConfig',
       config
     );
+    return parseSharedStatus(data.data);
   }
 
   // per-uin 配置（napcat_{uin}.json）

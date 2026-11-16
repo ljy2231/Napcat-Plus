@@ -7,6 +7,7 @@ import PageLoading from '@/components/page_loading';
 import SwitchCard from '@/components/switch_card';
 
 import QQManager from '@/controllers/qq_manager';
+import { SHARED_SCOPE_HINT, sharedStatusToast } from '@/utils/shared-config';
 
 interface BypassFormData {
   hook: boolean;
@@ -51,8 +52,11 @@ const BypassConfigCard = () => {
   const onSubmit = handleSubmit(async (data) => {
     try {
       const { o3HookMode, ...bypass } = data;
-      await QQManager.setNapCatConfig({ bypass, o3HookMode: o3HookMode ? 1 : 0 });
-      toast.success('保存成功，重启后生效');
+      const status = await QQManager.setNapCatConfig({ bypass, o3HookMode: o3HookMode ? 1 : 0 });
+      const feedback = sharedStatusToast(status, '保存成功，重启后生效');
+      if (feedback.kind === 'success') toast.success(feedback.text);
+      else if (feedback.kind === 'warning') toast(feedback.text, { icon: '⚠️' });
+      else toast.error(feedback.text);
     } catch (error) {
       const msg = (error as Error).message;
       toast.error(`保存失败: ${msg}`);
@@ -81,6 +85,7 @@ const BypassConfigCard = () => {
         <p className='text-sm text-default-500'>
           控制 Napi2Native 模块的各项反检测功能，修改后需重启生效。
         </p>
+        <p className='text-xs text-default-500'>{SHARED_SCOPE_HINT} 未登录 QQ 也可编辑。</p>
       </div>
       <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3'>
         <Controller

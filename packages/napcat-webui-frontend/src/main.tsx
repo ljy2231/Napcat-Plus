@@ -9,6 +9,7 @@ import '@/styles/globals.css';
 import key from './const/key';
 import WebUIManager from './controllers/webui_manager';
 import { initFont, loadTheme } from './utils/theme';
+import { resourceRecoveryMessage } from './utils/resource-recovery';
 
 const token = localStorage.getItem(key.token);
 const theme = localStorage.getItem(key.theme);
@@ -30,6 +31,17 @@ if (token && token !== '""') {
     // AuthChecker and the authenticated API pages provide the recovery UI.
   });
 }
+
+// Vite fires this when a lazily imported chunk cannot be fetched (typically after a
+// rebuild left the browser holding an old index). Prevent the unhandled rejection
+// and surface an actionable reload prompt instead of a blank page.
+// The event only fires for failed chunk preloads, so no string matching is needed.
+window.addEventListener('vite:preloadError', (event) => {
+  event.preventDefault();
+  const online = navigator.onLine;
+  const message = `${resourceRecoveryMessage(online)}\n\n刷新后未保存的表单会丢失，管理登录凭据会保留。`;
+  if (online && window.confirm(message + '\n\n现在刷新页面？')) window.location.reload();
+});
 
 loadTheme();
 initFont();

@@ -224,6 +224,22 @@ self.addEventListener('fetch', (event) => {
   // 9. 其他外部请求 - Network Only
 });
 
+/**
+ * A script/style request answered with HTML means the build changed (or the
+ * server fell back to the SPA entrypoint). Never cache or return that as if it
+ * were valid code: the page must reload instead of throwing a module error.
+ */
+function isCodeRequest (request, url) {
+  return request.destination === 'script' ||
+    request.destination === 'style' ||
+    /\.(?:m?js|css)$/.test(url.pathname);
+}
+
+function isHtmlResponse (response) {
+  const type = response.headers.get('content-type') || '';
+  return type.indexOf('text/html') !== -1;
+}
+
 // ============ 缓存策略实现 ============
 
 /**
@@ -238,6 +254,12 @@ async function cacheFirst (request, url) {
 
   try {
     const networkResponse = await fetch(request);
+    if (networkResponse && networkResponse.status === 200 && isCodeRequest(request, url) && isHtmlResponse(networkResponse)) {
+      // Stale build: drop the bad entry and let the caller surface a reload prompt.
+      const cache = await caches.open(CACHE_NAME);
+      await cache.delete(request);
+      return new Response('Script no longer available; reload required', { status: 503, headers: { 'Content-Type': 'text/plain' } });
+    }
     if (networkResponse && networkResponse.status === 200) {
       const cache = await caches.open(CACHE_NAME);
       cache.put(request, networkResponse.clone());
@@ -287,7 +309,9 @@ async function cacheFirstWithOpaque (request, url) {
 async function networkFirst (request) {
   try {
     const networkResponse = await fetch(request);
-    if (networkResponse && networkResponse.status === 200) {
+    const url = new URL(request.url);
+    if (networkResponse && networkResponse.status === 200 &&
+      !(isCodeRequest(request, url) && isHtmlResponse(networkResponse))) {
       const cache = await caches.open(CACHE_NAME);
       cache.put(request, networkResponse.clone());
     }

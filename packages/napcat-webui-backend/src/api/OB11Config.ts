@@ -1,60 +1,77 @@
 import { RequestHandler } from 'express';
-import { existsSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
-import { loadConfig, OneBotConfig } from '@/napcat-webui-backend/src/onebot/config';
+import { loadConfig, OneBotConfigSchema, type OneBotConfig } from '@/napcat-webui-backend/src/onebot/config';
 import { webUiPathWrapper } from '@/napcat-webui-backend/index';
 import { WebUiDataRuntime } from '@/napcat-webui-backend/src/helper/Data';
 import { sendError, sendSuccess } from '@/napcat-webui-backend/src/utils/response';
 import { isEmpty } from '@/napcat-webui-backend/src/utils/check';
 import json5 from 'json5';
+import { readSharedConfig, writeSharedConfig } from '@/napcat-webui-backend/src/helper/SharedConfig';
 
-// 获取OneBot11配置
+export interface SharedConfigWriteStatus {
+  scope: 'global';
+  /** applied = already pushed to the running adapters; pending = saved, takes effect later. */
+  application: 'applied' | 'pending' | 'failed';
+  message: string;
+}
+
+/**
+ * OneBot settings are instance-wide. Reading works before any QQ account logs in,
+ * and the same file is used by every account on this instance.
+ */
 export const OB11GetConfigHandler: RequestHandler = (_, res) => {
-  // 获取QQ登录状态
-  const isLogin = WebUiDataRuntime.getQQLoginStatus();
-  // 如果未登录，返回错误
-  if (!isLogin) {
-    return sendError(res, 'Not Login');
-  }
-  // 获取登录的QQ号
-  const uin = WebUiDataRuntime.getQQLoginUin();
-  // 读取配置文件路径
-  const configFilePath = resolve(webUiPathWrapper.configPath, `./onebot11_${uin}.json`);
-  // 尝试解析配置文件
   try {
-    // 读取配置文件内容
-    const configFileContent = existsSync(configFilePath)
-      ? readFileSync(configFilePath).toString()
-      : readFileSync(resolve(webUiPathWrapper.configPath, './onebot11.json')).toString();
-    // 解析配置文件并加载配置
-    const data = loadConfig(json5.parse(configFileContent)) as OneBotConfig;
-    // 返回配置文件
-    return sendSuccess(res, data);
-  } catch (_e) {
-    return sendError(res, 'Config Get Error');
+    const result = readSharedConfig<OneBotConfig>(
+      webUiPathWrapper.configPath,
+      'onebot11',
+      OneBotConfigSchema,
+      WebUiDataRuntime.getQQLoginUin() || undefined
+    );
+    return sendSuccess(res, {
+      ...result.data,
+      __shared: {
+        scope: 'global',
+        source: result.source,
+        legacyAccounts: result.legacyAccounts,
+        online: !!WebUiDataRuntime.getOneBotContext(),
+      },
+    });
+  } catch (error) {
+    return sendError(res, 'Config Get Error: ' + (error as Error).message);
   }
 };
 
-// 写入OneBot11配置
 export const OB11SetConfigHandler: RequestHandler = async (req, res) => {
-  // 获取QQ登录状态
-  const isLogin = WebUiDataRuntime.getQQLoginStatus();
-  // 如果未登录，返回错误
-  if (!isLogin) {
-    return sendError(res, 'Not Login');
-  }
-  // 如果配置为空，返回错误
-  if (isEmpty(req.body.config)) {
-    return sendError(res, 'config is empty');
-  }
-  // 写入配置
+  if (isEmpty(req.body.config)) return sendError(res, 'config is empty');
+  let config: OneBotConfig;
   try {
-    // 解析并加载配置
-    const config = loadConfig(json5.parse(req.body.config)) as OneBotConfig;
-    // 写入配置
-    await WebUiDataRuntime.setOB11Config(config);
-    return sendSuccess(res, null);
-  } catch (e) {
-    return sendError(res, 'Error: ' + e);
+    config = loadConfig(json5.parse(req.body.config)) as OneBotConfig;
+  } catch (error) {
+    return sendError(res, 'Config Invalid: ' + (error as Error).message);
   }
+
+  // Persist first so the settings survive a missing/offline OneBot context.
+  let saved: OneBotConfig;
+  try {
+    saved = writeSharedConfig<OneBotConfig>(
+      webUiPathWrapper.configPath,
+      'onebot11',
+      OneBotConfigSchema,
+      config
+    );
+  } catch (error) {
+    return sendError(res, 'Config Save Error: ' + (error as Error).message);
+  }
+
+  const status: SharedConfigWriteStatus = { scope: 'global', application: 'pending', message: '已保存到实例共享配置；QQ 登录后/重启后生效。' };
+  if (WebUiDataRuntime.getOneBotContext()) {
+    try {
+      await WebUiDataRuntime.setOB11Config(saved);
+      status.application = 'applied';
+      status.message = '已保存并应用到当前网络适配器。';
+    } catch (error) {
+      status.application = 'failed';
+      status.message = '已保存，但应用到运行中的适配器失败：' + (error as Error).message;
+    }
+  }
+  return sendSuccess(res, status);
 };

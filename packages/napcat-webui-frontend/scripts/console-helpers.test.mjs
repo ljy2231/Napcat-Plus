@@ -91,3 +91,42 @@ test('explicit token clear sends empty string; replacement sends only new token'
   assert.equal(helpers.buildGSCoreUpdate(config, 'new-token', false).token, 'new-token');
   assert.equal(helpers.buildGSCoreUpdate(config, 'new-token', true).token, '');
 });
+
+const sharedSource = await readFile(new URL('../src/utils/shared-config.ts', import.meta.url), 'utf8');
+const sharedOutput = ts.transpileModule(sharedSource, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText;
+const shared = await import(`data:text/javascript;base64,${Buffer.from(sharedOutput).toString('base64')}`);
+
+test('shared config status maps applied/pending/failed to distinct feedback', () => {
+  assert.equal(shared.parseSharedStatus(undefined), undefined);
+  assert.equal(shared.parseSharedStatus({ scope: 'account' }), undefined);
+  assert.equal(shared.sharedStatusToast({ scope: 'global', application: 'applied', message: '已生效' }).kind, 'success');
+  assert.equal(shared.sharedStatusToast({ scope: 'global', application: 'pending', message: '待重启' }).kind, 'warning');
+  assert.equal(shared.sharedStatusToast({ scope: 'global', application: 'failed', message: '失败' }).kind, 'error');
+});
+
+test('shared config metadata rejects malformed blocks', () => {
+  assert.equal(shared.parseSharedMeta(null), undefined);
+  assert.equal(shared.parseSharedMeta({ scope: 'global', source: 'weird' }), undefined);
+  const meta = shared.parseSharedMeta({ scope: 'global', source: 'migrated-legacy', legacyAccounts: ['123', 5] });
+  assert.deepEqual(meta.legacyAccounts, ['123']);
+});
+
+const recoverySource = await readFile(new URL('../src/utils/resource-recovery.ts', import.meta.url), 'utf8');
+const recoveryOutput = ts.transpileModule(recoverySource, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText;
+const recovery = await import(`data:text/javascript;base64,${Buffer.from(recoveryOutput).toString('base64')}`);
+
+test('only genuine chunk/module failures are treated as resource errors', () => {
+  assert.equal(recovery.isResourceLoadError(new Error('Failed to fetch dynamically imported module: http://h/a.js')), true);
+  assert.equal(recovery.isResourceLoadError(new Error('Importing a module script failed.')), true);
+  assert.equal(recovery.isResourceLoadError(new Error('Loading chunk 42 failed')), false);
+  assert.equal(recovery.isResourceLoadError(new Error('Not Login')), false);
+  assert.equal(recovery.isResourceLoadError(new Error('Request failed with status code 500')), false);
+  assert.equal(recovery.isResourceLoadError(null), false);
+});
+
+test('recovery never auto-reloads while offline or unconfirmed', () => {
+  assert.equal(recovery.shouldReloadResources(false, true, false), false);
+  assert.equal(recovery.shouldReloadResources(true, false, false), false);
+  assert.equal(recovery.shouldReloadResources(true, true, true), false);
+  assert.equal(recovery.shouldReloadResources(true, true, false), true);
+});
