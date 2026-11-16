@@ -151,7 +151,18 @@ function segmentArray (value: unknown): unknown[] {
   if (!Array.isArray(value) || value.length === 0 || value.length > GScoreLimits.segments) throw new Error('消息内容需包含 1–100 个消息段');
   return value;
 }
-function scalarSegment (segment: Record<string, unknown>): OneBotSegment {
+/**
+ * Protocol markers that GSCore appends for its own bookkeeping. The group marker
+ * is added to every group frame after the real content, so treating it as an
+ * unknown message type rejects the whole send. Older adapters silently skip these.
+ */
+const IGNORED_SEGMENTS = new Set(['group', 'image_size', 'buttons', 'template_buttons', 'template_markdown']);
+
+function isIgnoredSegment (type: unknown): boolean {
+  return typeof type === 'string' && IGNORED_SEGMENTS.has(type);
+}
+
+function scalarSegment (segment: Record<string, unknown>): OneBotSegment | undefined {
   const data = segment['data'];
   switch (segment['type']) {
     case 'text': case 'markdown':
@@ -174,21 +185,34 @@ function scalarSegment (segment: Record<string, unknown>): OneBotSegment {
       if (separator < 1) throw new Error('文件格式应为 name|url 或 name|base64');
       return { type: 'file', data: { name: safeFileName(data.slice(0, separator)), file: normalizeMedia(data.slice(separator + 1)) } };
     }
-    default: throw new Error('不支持的 GSCore 消息类型（控制动作、notice/meta、按钮模板暂不支持）');
+    default: {
+      // For forward compatibility, an unknown textual extension is downgraded to
+      // plain text (never an action, URL fetch or markup). Non-text unknowns such
+      // as control actions still fail closed.
+      if (typeof data === 'string' && data.trim().length > 0 && data.length <= GScoreLimits.textChars) {
+        return { type: 'text', data: { text: data } };
+      }
+      throw new Error('不支持的 GSCore 消息类型（控制动作、notice/meta、按钮模板暂不支持）');
+    }
   }
 }
 
 function forwardNodes (value: unknown, selfId: string, depth: number, budget: Budget): OneBotSegment[] {
   if (depth > GScoreLimits.nodeDepth) throw new Error('合并转发深度超过 3 层');
-  return segmentArray(value).map((child) => {
+  const nodes: OneBotSegment[] = [];
+  for (const child of segmentArray(value)) {
     const segment = record(child);
     if (!segment) throw new Error('合并转发消息段无效');
+    const type = segment['type'];
+    if (isIgnoredSegment(type)) continue;
     consume(budget);
-    const content = segment['type'] === 'node'
+    const content = type === 'node'
       ? forwardNodes(segment['data'], selfId, depth + 1, budget)
-      : [scalarSegment(segment)];
-    return { type: 'node', data: { user_id: selfId, nickname: 'Napcat-Plus', content } };
-  });
+      : [scalarSegment(segment)].filter((item): item is OneBotSegment => item !== undefined);
+    if (!content.length) continue;
+    nodes.push({ type: 'node', data: { user_id: selfId, nickname: 'Napcat-Plus', content } });
+  }
+  return nodes;
 }
 
 /** Validate the entire packet before returning a bounded, ordered send-only plan. */
@@ -219,17 +243,25 @@ export function fromGScoreMessages (message: unknown, selfId: string): ActionReq
   for (const item of segmentArray(value['content'])) {
     const segment = record(item);
     if (!segment) throw new Error('消息段无效');
+    const type = segment['type'];
+    // Bookkeeping markers (notably GSCore's trailing group marker) carry no content.
+    if (isIgnoredSegment(type)) continue;
     consume(budget);
-    if (segment['type'] === 'node') {
+    if (type === 'node') {
       flush();
-      push({ action: group ? 'send_group_forward_msg' : 'send_private_forward_msg', params: { ...target, messages: forwardNodes(segment['data'], selfId, 1, budget) } });
-    } else if (segment['type'] === 'file') {
+      const messages = forwardNodes(segment['data'], selfId, 1, budget);
+      if (messages.length) push({ action: group ? 'send_group_forward_msg' : 'send_private_forward_msg', params: { ...target, messages } });
+    } else if (type === 'file') {
       flush();
       const file = scalarSegment(segment);
-      push({ action: group ? 'upload_group_file' : 'upload_private_file', params: { ...target, ...file.data } });
-    } else normal.push(scalarSegment(segment));
+      if (file) push({ action: group ? 'upload_group_file' : 'upload_private_file', params: { ...target, ...file.data } });
+    } else {
+      const converted = scalarSegment(segment);
+      if (converted) normal.push(converted);
+    }
   }
   flush();
+  if (!plan.length) throw new Error('消息不包含可发送内容');
   assertPayloadSize(plan);
   return plan;
 }

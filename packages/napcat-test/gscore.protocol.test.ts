@@ -52,8 +52,13 @@ describe('safe GSCore wire compatibility', () => {
     expect(() => fromGScoreMessages(packet(simple, { bot_self_id: 0 }), '789')).toThrow('账号');
     expect(() => fromGScoreMessages(packet(simple, { target_id: Number.MAX_SAFE_INTEGER + 1 }), '789')).toThrow();
     expect(() => fromGScoreMessages(packet(simple, { action: 'delete_msg' }), '789')).toThrow('任意 API');
-    for (const type of ['excute_delete_message', 'excute_ban_user', 'meta-poke', 'buttons']) {
+    for (const type of ['excute_delete_message', 'excute_ban_user', 'meta-poke']) {
       expect(() => fromGScoreMessages(packet([segment(type, { message_id: 1 })]), '789')).toThrow('暂不支持');
+    }
+    // UI/bookkeeping markers carry no executable content: they are skipped, and a
+    // frame that consists only of markers is rejected as having nothing to send.
+    for (const type of ['group', 'image_size', 'buttons', 'template_buttons', 'template_markdown']) {
+      expect(() => fromGScoreMessages(packet([segment(type, { message_id: 1 })]), '789')).toThrow();
     }
   });
   it('basic inbound mapper keeps reply ID separate and file name from data.file', () => {
