@@ -16,6 +16,8 @@ const WebLoginPage = lazy(() => import('@/pages/web_login'));
 const IndexPage = lazy(() => import('@/pages/index'));
 const QQLoginPage = lazy(() => import('@/pages/qq_login'));
 const DashboardIndexPage = lazy(() => import('@/pages/dashboard'));
+const GSCorePage = lazy(() => import('@/pages/dashboard/gscore'));
+const ToolsPage = lazy(() => import('@/pages/dashboard/tools'));
 const AboutPage = lazy(() => import('@/pages/dashboard/about'));
 const ConfigPage = lazy(() => import('@/pages/dashboard/config'));
 const DebugPage = lazy(() => import('@/pages/dashboard/debug'));
@@ -70,6 +72,8 @@ function AppRoutes () {
     <Routes>
       <Route path='/' element={<IndexPage />}>
         <Route index element={<DashboardIndexPage />} />
+        <Route path='gscore' element={<GSCorePage />} />
+        <Route path='tools' element={<ToolsPage />} />
         <Route path='network' element={<NetworkPage />} />
         <Route path='config' element={<ConfigPage />} />
         <Route path='logs' element={<LogsPage />} />

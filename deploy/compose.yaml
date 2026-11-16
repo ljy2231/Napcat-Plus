@@ -1,0 +1,31 @@
+name: qq-bot-console
+services:
+  console:
+    image: qq-bot-console:0.1.0
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+      WEBUI_TOKEN: ${WEBUI_TOKEN:?Set a strong WEBUI_TOKEN in your private .env file}
+      QQ_BOT_CONSOLE_PINNED: "1"
+    ports:
+      # Localhost by default. Use SSH forwarding or an authenticated TLS proxy.
+      - "${BIND_HOST:-127.0.0.1}:${WEBUI_PORT:-6099}:6099"
+    volumes:
+      - qq-data:/app/.config/QQ
+      - console-config:/app/napcat/config
+      - console-plugins:/app/napcat/plugins
+    networks:
+      - bot-network
+    stop_grace_period: 30s
+
+networks:
+  bot-network:
+    name: ${BOT_NETWORK:-qq-bot-network}
+
+volumes:
+  qq-data:
+  console-config:
+  console-plugins:

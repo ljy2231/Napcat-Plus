@@ -43,7 +43,7 @@ export const ThemeSwitch: FC<ThemeSwitchProps> = ({
 
   return (
     <Component
-      aria-label={isSelected ? 'Switch to dark mode' : 'Switch to light mode'}
+      aria-label={isSelected ? '切换深色主题' : '切换浅色主题'}
       {...getBaseProps({
         className: clsx(
           'px-px transition-opacity hover:opacity-80 cursor-pointer',

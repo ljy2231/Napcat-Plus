@@ -11,6 +11,8 @@ import {
   LuPackage,
   LuStore,
   LuPuzzle,
+  LuCable,
+  LuWrench,
 } from 'react-icons/lu';
 
 export type SiteConfig = typeof siteConfig;
@@ -24,21 +26,31 @@ export interface MenuItem {
 }
 
 export const siteConfig = {
-  name: 'NapCat',
-  description: 'NapCat WebUI.',
+  name: 'QQ Bot Console',
+  description: '中文优先的 QQ 机器人管理控制台。',
   navItems: [
     {
-      label: '基础信息',
+      label: '总览仪表盘',
       icon: <LuLayoutDashboard className='w-5 h-5' />,
       href: '/',
     },
     {
-      label: '网络配置',
+      label: 'GSCore 连接',
+      icon: <LuCable className='w-5 h-5' />,
+      href: '/gscore',
+    },
+    {
+      label: '内置工具',
+      icon: <LuWrench className='w-5 h-5' />,
+      href: '/tools',
+    },
+    {
+      label: 'OneBot 连接',
       icon: <LuSignal className='w-5 h-5' />,
       href: '/network',
     },
     {
-      label: '猫猫日志',
+      label: '运行日志',
       icon: <LuFileText className='w-5 h-5' />,
       href: '/logs',
     },
@@ -83,13 +95,13 @@ export const siteConfig = {
       href: '/config',
     },
     {
-      label: '关于我们',
+      label: '关于与版本',
       icon: <LuInfo className='w-5 h-5' />,
       href: '/about',
     },
   ] as MenuItem[],
   links: {
-    github: 'https://github.com/NapNeko/NapCatQQ',
-    docs: 'https://napcat.napneko.icu/',
+    github: 'https://github.com/ljy2231/qq-bot-console',
+    docs: 'https://github.com/ljy2231/qq-bot-console#readme',
   },
 };

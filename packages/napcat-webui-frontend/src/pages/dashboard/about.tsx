@@ -1,7 +1,6 @@
 import { Card, CardBody, CardHeader } from '@heroui/card';
 import { Chip } from '@heroui/chip';
 import { Divider } from '@heroui/divider';
-import { Image } from '@heroui/image';
 import { Link } from '@heroui/link';
 import { Select, SelectItem } from '@heroui/select';
 import { Snippet } from '@heroui/snippet';
@@ -22,12 +21,14 @@ import { IoDocument, IoRocketSharp } from 'react-icons/io5';
 
 import CryptoJS from 'crypto-js';
 
-import logo from '@/assets/images/logo.png';
+import { ConsoleBrand } from '@/components/console-ui';
+import ConsoleManager from '@/controllers/console_manager';
 import QQManager from '@/controllers/qq_manager';
 import WebUIManager from '@/controllers/webui_manager';
 
 function VersionInfo () {
   const { data, loading, error } = useRequest(WebUIManager.GetNapCatVersion);
+  const consoleVersion = useRequest(ConsoleManager.getStatus);
 
   return (
     <div className='flex items-center gap-2'>
@@ -41,8 +42,8 @@ function VersionInfo () {
           )
           : (
             <div className='flex items-center gap-2'>
-              <Chip size='sm' color='default' variant='flat' className='text-default-500'>WebUI v0.0.6</Chip>
-              <Chip size='sm' color='primary' variant='flat'>Core {data?.version}</Chip>
+              <Chip size='sm' color='default' variant='flat' className='text-default-500'>Console {consoleVersion.error ? '未知' : consoleVersion.data?.version || '读取中'}</Chip>
+              <Chip size='sm' color='primary' variant='flat'>NapCat Core {data?.version}</Chip>
             </div>
           )}
     </div>
@@ -191,7 +192,8 @@ export default function AboutPage () {
   ];
 
   const links = [
-    { icon: <BsGithub />, name: 'GitHub', href: 'https://github.com/NapNeko/NapCatQQ' },
+    { icon: <BsGithub />, name: 'QQ Bot Console 项目', href: 'https://github.com/ljy2231/qq-bot-console' },
+    { icon: <BsGithub />, name: 'NapCat 上游项目', href: 'https://github.com/NapNeko/NapCatQQ' },
     { icon: <BsTelegram />, name: 'Telegram', href: 'https://t.me/napcatqq' },
     { icon: <BsTencentQq />, name: '交流群 欢乐一家亲', href: 'https://qm.qq.com/q/VwpnklcXqo' },
     { icon: <BsTencentQq />, name: '交流群 皇亲国戚', href: 'https://qm.qq.com/q/gq18RH7o7S' },
@@ -204,16 +206,14 @@ export default function AboutPage () {
 
   return (
     <div className='flex flex-col h-full w-full gap-6 p-2 md:p-6'>
-      <title>关于 - NapCat WebUI</title>
+      <title>关于与版本 · QQ Bot Console</title>
 
       {/* 头部标题区 */}
       <div className='flex flex-col gap-2'>
-        <h1 className='text-2xl font-bold flex items-center gap-3 text-default-900'>
-          <Image src={logo} alt='NapCat Logo' width={32} height={32} />
-          关于 NapCat
-        </h1>
+        <ConsoleBrand />
+        <h1 className='text-2xl font-bold text-default-900 mt-3'>关于与版本</h1>
         <div className='flex items-center gap-4 text-small text-default-500'>
-          <p>现代化、轻量级的 QQ 机器人框架</p>
+          <p>基于 NapCat 的独立增强控制台，非上游官方发行版</p>
           <Divider orientation='vertical' className='h-4' />
           <VersionInfo />
         </div>
@@ -232,12 +232,12 @@ export default function AboutPage () {
             </CardHeader>
             <CardBody className='py-4 text-default-600 leading-relaxed space-y-2'>
               <p>
-                NapCat (瞌睡猫) 是一个致力于打破 QQ 机器人开发壁垒的开源项目。我们利用 NTQQ 的底层能力，
-                构建了一个无需 GUI 即可在服务器端稳定运行的 Headless 框架。
+                QQ Bot Console 是基于 NapCat 的独立增强版，提供中文优先的管理界面、GSCore 连接管理与运行诊断。
+                底层 QQ / OneBot 能力来自 NapCat，保留上游来源与版权声明。
               </p>
               <p>
-                无论是个人开发者还是企业用户，NapCat 都能提供开箱即用的 OneBot 11 协议支持，
-                助您快速将创意转化为现实。
+                本项目不代表 QQ 官方或 NapCat 上游团队。使用与分发请遵循仓库许可证、授权范围及第三方组件许可，
+                不要将界面增强理解为无限制的商业使用许可。
               </p>
             </CardBody>
           </Card>
@@ -308,9 +308,9 @@ export default function AboutPage () {
       {/* 底部版权 - 移出 grid 布局 */}
       <div className='w-full text-center text-tiny text-default-400 py-4 mt-auto flex flex-col items-center gap-1'>
         <p className='flex items-center justify-center gap-1'>
-          Made with <span className='text-danger'>❤️</span> by NapCat Team
+          QQ Bot Console · 基于 NapCat / NextNapCatWebUI
         </p>
-        <p>MIT License © {new Date().getFullYear()}</p>
+        <p>原作者版权与第三方许可均予保留，详见仓库 LICENSE 与说明。</p>
       </div>
     </div>
   );

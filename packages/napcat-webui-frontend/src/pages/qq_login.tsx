@@ -1,29 +1,23 @@
 import { Button } from '@heroui/button';
-import { CardBody, CardHeader } from '@heroui/card';
-import { Image } from '@heroui/image';
 import { Tab, Tabs } from '@heroui/tabs';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import CryptoJS from 'crypto-js';
-import { MdSettings } from 'react-icons/md';
-
-import logo from '@/assets/images/logo.png';
+import { LuArrowLeft, LuSettings, LuShieldCheck } from 'react-icons/lu';
+import { ConsolePageHeader, ConsolePanel, StatusBadge } from '@/components/console-ui';
+import { loginPresentation } from '@/utils/console';
 import GUIDManager from '@/components/guid_manager';
 import Modal from '@/components/modal';
 
-import HoverEffectCard from '@/components/effect_card';
-import { title } from '@/components/primitives';
 import PasswordLogin from '@/components/password_login';
 import QrCodeLogin from '@/components/qr_code_login';
 import QuickLogin from '@/components/quick_login';
-import { ThemeSwitch } from '@/components/theme-switch';
 import type { CaptchaCallbackData } from '@/components/tencent_captcha';
 
 import QQManager from '@/controllers/qq_manager';
 import useDialog from '@/hooks/use-dialog';
 import PureLayout from '@/layouts/pure';
-import { motion } from 'motion/react';
 
 const parseLoginError = (errorStr: string) => {
   if (errorStr.startsWith('登录失败: ')) {
@@ -61,7 +55,9 @@ export default function QQLoginPage () {
   const lastErrorRef = useRef<string>('');
   const [qqList, setQQList] = useState<LoginListItem[]>([]);
   const [refresh, setRefresh] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<string>('shortcut');
+  const [activeTab, setActiveTab] = useState<string>('qrcode');
+  const [statusError, setStatusError] = useState('');
+  const pollBusyRef = useRef(false);
   const firstLoad = useRef<boolean>(true);
   const [captchaState, setCaptchaState] = useState<{
     needCaptcha: boolean;
@@ -203,10 +199,13 @@ export default function QQLoginPage () {
   };
 
   const onUpdateQrCode = async () => {
+    if (pollBusyRef.current) return;
+    pollBusyRef.current = true;
     const requestVersion = qrcodeRequestVersionRef.current;
     if (firstLoad.current) setIsLoading(true);
     try {
       const data = await QQManager.checkQQLoginStatusWithQrcode();
+      setStatusError('');
       setLoginPhase(data.loginPhase || (data.isLogin ? 'ready' : 'waiting_qrcode'));
       if (data.loginPhase === 'reconnecting') {
         setIsRecoveringLoginService(true);
@@ -228,20 +227,7 @@ export default function QQLoginPage () {
         if (data.loginError && data.loginError !== lastErrorRef.current) {
           lastErrorRef.current = data.loginError;
           setLoginError(data.loginError);
-          const friendlyMsg = parseLoginError(data.loginError);
-
-          // 被踢下线时页面会自动进入登录服务恢复流程。它不是可由用户
-          // 处理的登录表单错误，也不应弹出对话框遮住恢复状态。
-          const isRecovering = data.loginPhase === 'reconnecting' || isRecoveringLoginService;
-          const isQrCodeExpired = friendlyMsg.includes('二维码') && (friendlyMsg.includes('过期') || friendlyMsg.includes('失效'));
-
-          if (!isRecovering && (!isQrCodeExpired || activeTab === 'qrcode')) {
-            dialog.alert({
-              title: '登录失败',
-              content: friendlyMsg,
-              confirmText: '确定',
-            });
-          }
+          // Polling errors remain inline; do not repeatedly interrupt users with dialogs.
         } else if (!data.loginError) {
           lastErrorRef.current = '';
           setLoginError('');
@@ -251,10 +237,9 @@ export default function QQLoginPage () {
       const msg = (error as Error).message;
       // Worker 重启时，旧连接被关闭是预期现象。恢复状态持续轮询即可，
       // 不要把 ERR_EMPTY_RESPONSE 作为用户可操作的错误反复弹出。
-      if (!isRecoveringLoginService) {
-        toast.error(`获取二维码失败: ${msg}`);
-      }
+      setStatusError(isRecoveringLoginService ? '登录服务正在恢复，等待接口重新连接。' : `获取登录状态失败：${msg}`);
     } finally {
+      pollBusyRef.current = false;
       if (firstLoad.current) {
         setIsLoading(false);
         firstLoad.current = false;
@@ -354,101 +339,45 @@ export default function QQLoginPage () {
     return () => clearTimeout(timer);
   }, [isRecoveringLoginService]);
 
+  const presentation = loginPresentation({ isLogin: false, isOffline: loginPhase === 'offline', loginPhase, coreReady: false, loginError: parseLoginError(loginError) });
+  const phaseIndex = loginPhase === 'initializing' ? 2 : loginPhase === 'qrcode_scanned' ? 1 : 0;
+
   return (
     <>
-      <title>QQ登录 - NapCat WebUI</title>
+      <title>QQ 登录状态 · QQ Bot Console</title>
       <PureLayout>
-        <motion.div
-          initial={{ opacity: 0, y: 20, scale: 0.95 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.5, type: 'spring', stiffness: 120, damping: 20 }}
-          className='w-[608px] max-w-full py-8 px-2 md:px-8 overflow-hidden'
-        >
-          <HoverEffectCard
-            className='items-center gap-4 pt-0 pb-6 bg-default-50'
-            maxXRotation={3}
-            maxYRotation={3}
-          >
-            <CardHeader className='inline-block max-w-lg text-center justify-center'>
-              <div className='flex items-center justify-center w-full gap-2 pt-10'>
-                <Image alt='logo' height='7em' src={logo} />
-                <div>
-                  <span className={title()}>Web&nbsp;</span>
-                  <span className={title({ color: 'violet' })}>
-                    Login&nbsp;
-                  </span>
-                </div>
+        <div className='console-login-workspace'>
+          <ConsolePageHeader eyebrow='ACCOUNT CONNECTION' title='连接你的 QQ 账号' description='管理登录已完成。继续登录 QQ，或先返回控制台配置其他服务。' actions={<Button variant='bordered' size='sm' startContent={<LuArrowLeft />} onPress={() => navigate('/')}>返回控制台</Button>} />
+          <div className='console-login-grid'>
+            <ConsolePanel title='账号登录' description='推荐使用手机 QQ 扫码，登录过程由 QQ 服务处理。' actions={<Button isIconOnly size='sm' variant='light' aria-label='设备设置' onPress={() => dialog.confirm({ title: '打开设备高级设置', content: '设备 GUID 会影响 QQ 登录环境。仅在明确需要时修改；请勿为解决普通网络故障随意重置。', confirmText: '查看设置', onConfirm: () => setShowGUIDManager(true) })}><LuSettings size={19} /></Button>}>
+              <div className='console-login-state' aria-live='polite'>
+                <div className='flex justify-between items-center gap-3 mb-3'><h2 className='!mb-0'>{statusError ? '状态暂不可用' : presentation.label}</h2><StatusBadge tone={statusError ? 'danger' : presentation.tone}>{statusError ? '连接中断' : '实时登录状态'}</StatusBadge></div>
+                <p>{statusError || presentation.detail}</p>
               </div>
-              <div className='absolute right-4 top-4 flex items-center gap-2'>
-                <Button isIconOnly variant='light' aria-label='Settings' onPress={() => setShowGUIDManager(true)}>
-                  <MdSettings size={22} />
-                </Button>
-                <ThemeSwitch />
-              </div>
-            </CardHeader>
-
-            <CardBody className='flex gap-5 p-10 pt-0'>
-              <Tabs
-                fullWidth
-                classNames={{
-                  tabList: 'shadow-sm dark:shadow-none',
-                }}
-                isDisabled={isLoading}
-                size='lg'
-                selectedKey={activeTab}
-                onSelectionChange={(key) => key !== null && setActiveTab(key.toString())}
-              >
-                <Tab key='shortcut' title='快速登录'>
-                  <QuickLogin
-                    handleSelectionChange={handleSelectionChange}
-                    isLoading={isLoading}
-                    qqList={qqList}
-                    refresh={refresh}
-                    selectedQQ={uinValue}
-                    onSubmit={onSubmit}
-                    onUpdateQQList={onUpdateQQList}
-                  />
+              <Tabs fullWidth aria-label='QQ 登录方式' isDisabled={isLoading} size='md' selectedKey={activeTab} onSelectionChange={(key) => key !== null && setActiveTab(key.toString())} classNames={{ panel: 'pt-6' }}>
+                <Tab key='qrcode' title='扫码登录'>
+                  <QrCodeLogin loginError={statusError || parseLoginError(loginError)} qrcode={statusError ? '' : qrcode} onRefresh={onRefreshQRCode} isRefreshing={isRefreshingQRCode} loginPhase={loginPhase} isRecoveringLoginService={isRecoveringLoginService} />
+                </Tab>
+                <Tab key='shortcut' title='快捷登录'>
+                  <QuickLogin handleSelectionChange={handleSelectionChange} isLoading={isLoading} qqList={qqList} refresh={refresh} selectedQQ={uinValue} onSubmit={onSubmit} onUpdateQQList={onUpdateQQList} />
                 </Tab>
                 <Tab key='password' title='密码登录'>
-                  <PasswordLogin
-                    isLoading={isLoading}
-                    onSubmit={onPasswordSubmit}
-                    onCaptchaSubmit={onCaptchaSubmit}
-                    onNewDeviceVerified={onNewDeviceVerified}
-                    qqList={qqList}
-                    captchaState={captchaState}
-                    captchaVerifying={captchaVerifying}
-                    newDeviceState={newDeviceState}
-                    onCaptchaCancel={onCaptchaCancel}
-                    onNewDeviceCancel={onNewDeviceCancel}
-                  />
-                </Tab>
-                <Tab key='qrcode' title='扫码登录'>
-                  <QrCodeLogin
-                    loginError={parseLoginError(loginError)}
-                    qrcode={qrcode}
-                    onRefresh={onRefreshQRCode}
-                    isRefreshing={isRefreshingQRCode}
-                    loginPhase={loginPhase}
-                    isRecoveringLoginService={isRecoveringLoginService}
-                  />
+                  <PasswordLogin isLoading={isLoading} onSubmit={onPasswordSubmit} onCaptchaSubmit={onCaptchaSubmit} onNewDeviceVerified={onNewDeviceVerified} qqList={qqList} captchaState={captchaState} captchaVerifying={captchaVerifying} newDeviceState={newDeviceState} onCaptchaCancel={onCaptchaCancel} onNewDeviceCancel={onNewDeviceCancel} />
                 </Tab>
               </Tabs>
-              <Button
-                className='w-fit mx-auto'
-                variant='light'
-                color='primary'
-                onPress={() => {
-                  navigate('/web_login', {
-                    replace: true,
-                  });
-                }}
-              >
-                返回 Web Login
-              </Button>
-            </CardBody>
-          </HoverEffectCard>
-        </motion.div>
+            </ConsolePanel>
+            <div className='flex flex-col gap-5'>
+              <ConsolePanel title='登录进度' description='此处跟随真实登录阶段更新。'>
+                {[
+                  ['准备登录', '获取二维码，或选择历史账号快捷登录。'],
+                  ['手机确认', '扫码后请在手机 QQ 上确认本次登录。'],
+                  ['核心就绪', '登录成功后初始化服务，并自动进入控制台。'],
+                ].map(([title, description], index) => <div key={title} className={`console-step ${phaseIndex === index && !statusError ? 'is-current' : ''}`}><span className='console-step-number'>{index + 1}</span><div><strong>{title}</strong><p>{description}</p></div></div>)}
+              </ConsolePanel>
+              <div className='console-form-note'><div className='flex items-center gap-2 mb-2 font-semibold'><LuShieldCheck />遇到登录问题？</div>二维码长时间未出现时，请先查看当前错误与运行日志。不要直接删除账号数据或重置设备。GSCore 连接设置可在 QQ 登录前独立配置。<Button size='sm' variant='light' color='primary' className='mt-3' onPress={() => navigate('/logs')}>查看运行日志 →</Button></div>
+            </div>
+          </div>
+        </div>
       </PureLayout>
       {showGUIDManager && (
         <Modal

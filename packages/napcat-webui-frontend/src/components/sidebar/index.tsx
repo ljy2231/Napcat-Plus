@@ -1,112 +1,46 @@
 import { Button } from '@heroui/button';
-import { useLocalStorage } from '@uidotdev/usehooks';
-import clsx from 'clsx';
-import { AnimatePresence, motion } from 'motion/react';
-import React from 'react';
-import { IoMdLogOut } from 'react-icons/io';
-import { MdDarkMode, MdLightMode } from 'react-icons/md';
-
-import key from '@/const/key';
+import { useEffect, useRef } from 'react';
+import { LuLogOut, LuMoon, LuSun, LuX, LuExternalLink } from 'react-icons/lu';
+import { ConsoleBrand } from '@/components/console-ui';
 import useAuth from '@/hooks/auth';
 import useDialog from '@/hooks/use-dialog';
 import { useTheme } from '@/hooks/use-theme';
-import type { MenuItem } from '@/config/site';
-
+import { siteConfig, type MenuItem } from '@/config/site';
 import Menus from './menus';
 
-interface SideBarProps {
-  open: boolean;
-  items: MenuItem[];
-  onClose?: () => void;
-}
-
-const SideBar: React.FC<SideBarProps> = (props) => {
-  const { open, items, onClose } = props;
+export default function SideBar ({ open, items, onClose }: { open: boolean; items: MenuItem[]; onClose?: () => void; }) {
   const { toggleTheme, isDark } = useTheme();
   const { revokeAuth } = useAuth();
   const dialog = useDialog();
-  const [backgroundImage] = useLocalStorage<string>(key.backgroundImage, '');
-  const hasBackground = !!backgroundImage;
-
-  const onRevokeAuth = () => {
-    dialog.confirm({
-      title: '退出登录',
-      content: '确定要退出登录吗？',
-      onConfirm: revokeAuth,
-    });
-  };
-  return (
-    <>
-      <AnimatePresence initial={false}>
-        {open && (
-          <motion.div
-            className='fixed inset-y-0 left-64 right-0 bg-black/20 backdrop-blur-[1px] z-40 md:hidden'
-            aria-hidden='true'
-            onClick={onClose}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0, transition: { duration: 0.15 } }}
-            transition={{ duration: 0.2, delay: 0.15 }}
-          />
-        )}
-      </AnimatePresence>
-      <motion.div
-        className={clsx(
-          'overflow-hidden fixed top-0 left-0 h-full z-50 md:static md:shadow-none rounded-r-2xl md:rounded-none',
-          hasBackground
-            ? 'bg-transparent backdrop-blur-md'
-            : 'bg-content1/70 backdrop-blur-xl backdrop-saturate-150 shadow-xl',
-          'md:bg-transparent md:backdrop-blur-none md:backdrop-saturate-100 md:shadow-none'
-        )}
-        initial={{ width: 0 }}
-        animate={{ width: open ? '16rem' : 0 }}
-        transition={{
-          type: open ? 'spring' : 'tween',
-          stiffness: 150,
-          damping: open ? 15 : 10,
-        }}
-        style={{ overflow: 'hidden' }}
-      >
-        <motion.div className='w-64 flex flex-col items-stretch h-full transition-transform duration-300 ease-in-out z-30 relative float-right p-4'>
-          <div className='flex items-center justify-start gap-3 px-2 my-8 ml-2'>
-            <div className='h-5 w-1 bg-primary rounded-full shadow-sm' />
-            <div className={clsx(
-              'text-xl font-bold tracking-wide select-none',
-              hasBackground ? 'text-white' : 'text-default-900 dark:text-white'
-            )}
-            >
-              NapCat
-            </div>
-          </div>
-          <div className='overflow-y-auto flex flex-col flex-1 px-2'>
-            <Menus items={items} />
-            <div className='mt-auto mb-10 md:mb-0 space-y-3 px-2'>
-              <Button
-                className='w-full bg-primary-50/50 hover:bg-primary-100/80 text-primary-600 font-medium shadow-sm hover:shadow-md transition-all duration-300 backdrop-blur-sm'
-                radius='full'
-                variant='flat'
-                onPress={toggleTheme}
-                startContent={
-                  !isDark ? <MdLightMode size={18} /> : <MdDarkMode size={18} />
-                }
-              >
-                切换主题
-              </Button>
-              <Button
-                className='w-full mb-2 bg-danger-50/50 hover:bg-danger-100/80 text-danger-500 font-medium shadow-sm hover:shadow-md transition-all duration-300 backdrop-blur-sm'
-                radius='full'
-                variant='flat'
-                onPress={onRevokeAuth}
-                startContent={<IoMdLogOut size={18} />}
-              >
-                退出登录
-              </Button>
-            </div>
-          </div>
-        </motion.div>
-      </motion.div>
-    </>
-  );
-};
-
-export default SideBar;
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!open || window.matchMedia('(min-width: 1024px)').matches) return;
+    const previous = document.activeElement as HTMLElement | null;
+    closeRef.current?.focus();
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose?.();
+      if (event.key !== 'Tab') return;
+      const focusable = Array.from(panelRef.current?.querySelectorAll<HTMLElement>('a[href],button:not([disabled]),input:not([disabled])') || []).filter((element) => element.offsetParent !== null);
+      const first = focusable[0]; const last = focusable.at(-1);
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    };
+    window.addEventListener('keydown', escape);
+    return () => { window.removeEventListener('keydown', escape); previous?.focus(); };
+  }, [open, onClose]);
+  return <>
+    {open && <button className='console-sidebar-backdrop' aria-label='关闭导航菜单' onClick={onClose} />}
+    <aside ref={panelRef} className={`console-sidebar ${open ? 'is-open' : ''}`} aria-label='控制台导航'>
+      <div className='console-sidebar-brand'><ConsoleBrand /><Button ref={closeRef} isIconOnly size='sm' variant='light' className='lg:hidden' aria-label='关闭导航' onPress={onClose}><LuX size={20} /></Button></div>
+      <div className='console-sidebar-scroll'><Menus items={items} onNavigate={onClose} /></div>
+      <footer className='console-sidebar-footer'>
+        <a href={siteConfig.links.github} target='_blank' rel='noreferrer' className='console-repo-link'>项目与更新<LuExternalLink size={14} /></a>
+        <div className='flex items-center gap-2'>
+          <Button className='flex-1' size='sm' variant='flat' startContent={isDark ? <LuSun /> : <LuMoon />} onPress={toggleTheme}>{isDark ? '浅色主题' : '深色主题'}</Button>
+          <Button isIconOnly size='sm' variant='light' aria-label='退出管理登录' onPress={() => dialog.confirm({ title: '退出管理登录', content: '仅退出当前浏览器的管理会话，不会让 QQ 下线。', onConfirm: revokeAuth })}><LuLogOut size={18} /></Button>
+        </div>
+      </footer>
+    </aside>
+  </>;
+}

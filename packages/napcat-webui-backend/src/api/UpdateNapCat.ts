@@ -135,6 +135,9 @@ async function downloadFile (url: string, dest: string): Promise<void> {
 }
 
 export const UpdateNapCatHandler: RequestHandler = async (req, res) => {
+  if (process.env['QQ_BOT_CONSOLE_PINNED'] !== '0') {
+    return sendError(res, 'QQ Bot Console 使用固定构建，请通过本项目镜像/源码升级，避免上游在线更新覆盖定制功能');
+  }
   try {
     // 从请求体获取目标版本（可选）
     const { targetVersion, force, mirror } = req.body as UpdateRequestBody;
@@ -361,6 +364,10 @@ export const UpdateNapCatHandler: RequestHandler = async (req, res) => {
  */
 export async function applyPendingUpdates (webUiPathWrapper: NapCatPathWrapper, logger: ILogWrapper): Promise<void> {
   const configPath = path.join(webUiPathWrapper.configPath, 'napcat-update.json');
+  if (process.env['QQ_BOT_CONSOLE_PINNED'] !== '0') {
+    if (fs.existsSync(configPath)) logger.logWarn('[Console] 已跳过上游待应用更新，请通过固定镜像升级');
+    return;
+  }
 
   if (!fs.existsSync(configPath)) {
     // logger.log('[NapCat Update] No pending updates found');

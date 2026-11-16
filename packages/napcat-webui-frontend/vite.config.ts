@@ -13,7 +13,9 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       tsconfigPaths(),
-      ViteImageOptimizer({}),
+      // The original SVG brand mark is already tiny; avoid an optional SVGO
+      // dependency solely for optimizing this hand-authored icon.
+      ViteImageOptimizer({ exclude: /console-icon\.svg$/ }),
     ],
     base: '/webui/',
     server: {

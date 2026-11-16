@@ -8,6 +8,7 @@ import toast from 'react-hot-toast';
 import { IoFlash, IoFlashOff, IoRefresh } from 'react-icons/io5';
 
 import key from '@/const/key';
+import { serverRequest } from '@/utils/request';
 
 import OneBotMessageList from '@/components/onebot/message_list';
 import OneBotSendModal from '@/components/onebot/send_modal';
@@ -18,7 +19,7 @@ import { useWebSocketDebug } from '@/hooks/use-websocket-debug';
 export default function WSDebug () {
   const url = new URL(window.location.origin);
   url.port = '3001';
-  url.protocol = 'ws:';
+  url.protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const defaultWsUrl = url.href;
   const [socketConfig, setSocketConfig] = useLocalStorage(key.wsDebugConfig, {
     url: defaultWsUrl,
@@ -47,14 +48,7 @@ export default function WSDebug () {
 
     const initAdapter = async () => {
       try {
-        const response = await fetch('/api/Debug/create', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${localStorage.getItem('token')}`,
-          },
-        });
-        const data = await response.json();
+        const { data } = await serverRequest.post<ServerResponse<{ token: string; }>>('/Debug/create', {});
         if (data.code === 0) {
           // const adapterName = data.data.adapterName;
           const token = data.data.token;
@@ -112,7 +106,7 @@ export default function WSDebug () {
 
   return (
     <>
-      <title>Websocket调试 - NapCat WebUI</title>
+      <title>消息与实时调试 · QQ Bot Console</title>
       <div className='h-[calc(100vh-4rem)] overflow-hidden flex flex-col p-2 md:p-4 gap-2 md:gap-4'>
         {/* Config Card */}
         <Card className={clsx(

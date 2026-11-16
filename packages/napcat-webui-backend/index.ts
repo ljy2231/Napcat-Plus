@@ -116,6 +116,7 @@ export async function InitWebUi (logger: ILogWrapper, pathWrapper: NapCatPathWra
   statusHelperSubscription = statusSubscription;
   webUiLogger = logger;
   WebUiConfig = new WebUiConfigWrapper();
+  WebUiDataRuntime.clearWebUiConfigQuickFunction();
   let config = await WebUiConfig.GetWebUIConfig();
 
   // 检查是否禁用WebUI（若禁用则不进行密码检测）
@@ -172,7 +173,7 @@ export async function InitWebUi (logger: ILogWrapper, pathWrapper: NapCatPathWra
         return undefined;
       };
       if (!autoLoginAccount) {
-        return;
+        return { attempted: false, success: false };
       }
       const quickPasswordMd5 = resolveQuickPasswordMd5();
 
@@ -180,7 +181,7 @@ export async function InitWebUi (logger: ILogWrapper, pathWrapper: NapCatPathWra
         const { result, message } = await WebUiDataRuntime.requestQuickLogin(autoLoginAccount);
         if (result) {
           console.log(`[NapCat] [WebUi] 自动快速登录成功: ${autoLoginAccount}`);
-          return;
+          return { attempted: true, success: true };
         }
         console.log(`[NapCat] [WebUi] 自动快速登录失败: ${message || '未知错误'}`);
       } catch (error) {
@@ -189,27 +190,28 @@ export async function InitWebUi (logger: ILogWrapper, pathWrapper: NapCatPathWra
 
       if (!quickPasswordMd5) {
         console.log(`[NapCat] [WebUi] QQ ${autoLoginAccount} 未配置回退密码环境变量，建议优先使用 ACCOUNT + NAPCAT_QUICK_PASSWORD（NAPCAT_QUICK_PASSWORD_MD5 作为备用），保持二维码登录兜底`);
-        return;
+        return { attempted: true, success: false };
       }
 
       try {
         const { result, message, needCaptcha, needNewDevice } = await WebUiDataRuntime.requestPasswordLogin(autoLoginAccount, quickPasswordMd5);
         if (result) {
           console.log(`[NapCat] [WebUi] 自动密码回退登录成功: ${autoLoginAccount}`);
-          return;
+          return { attempted: true, success: true };
         }
         if (needCaptcha) {
           console.log(`[NapCat] [WebUi] 自动密码回退登录需要验证码，请在登录页面继续完成: ${autoLoginAccount}`);
-          return;
+          return { attempted: true, success: false, needsVerification: true };
         }
         if (needNewDevice) {
           console.log(`[NapCat] [WebUi] 自动密码回退登录需要新设备验证，请在登录页面继续完成: ${autoLoginAccount}`);
-          return;
+          return { attempted: true, success: false, needsVerification: true };
         }
         console.log(`[NapCat] [WebUi] 自动密码回退登录失败: ${message || '未知错误'}`);
       } catch (error) {
         console.log('[NapCat] [WebUi] 自动密码回退登录异常:' + error);
       }
+      return { attempted: true, success: false };
     });
   // ------------注册中间件------------
   // 使用express的json中间件

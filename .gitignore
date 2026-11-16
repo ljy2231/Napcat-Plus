@@ -1,6 +1,5 @@
 # Develop
 node_modules/
-pnpm-lock.yaml
 out/
 dist/
 /src/core.lib/common/
@@ -22,3 +21,20 @@ guild1.db-wal
 guild1.db-shm
 packages/napcat-develop/config/.env
 .claude
+
+# Local deployment data and secrets (never publish)
+.env
+.env.*
+!.env.example
+runtime.env
+/data/
+/qq/
+/config/
+logs/
+cache/
+*.db-wal
+*.db-shm
+*.qqxlog
+*.image.tar.gz
+*inspect.json
+__pycache__/

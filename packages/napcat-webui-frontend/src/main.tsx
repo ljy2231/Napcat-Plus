@@ -10,8 +10,6 @@ import key from './const/key';
 import WebUIManager from './controllers/webui_manager';
 import { initFont, loadTheme } from './utils/theme';
 
-WebUIManager.checkWebUiLogined();
-
 const token = localStorage.getItem(key.token);
 const theme = localStorage.getItem(key.theme);
 
@@ -21,6 +19,16 @@ if (token && !token.startsWith('"')) {
 }
 if (theme && !theme.startsWith('"')) {
   localStorage.setItem(key.theme, JSON.stringify(theme));
+}
+
+// Anonymous visitors must be able to render the login page without issuing an
+// unauthenticated auth/check promise. Existing credentials are still validated;
+// the request interceptor retains its normal Unauthorized invalidation behavior.
+if (token && token !== '""') {
+  void WebUIManager.checkWebUiLogined().catch(() => {
+    // Expired credentials / an unavailable backend are expected startup states.
+    // AuthChecker and the authenticated API pages provide the recovery UI.
+  });
 }
 
 loadTheme();

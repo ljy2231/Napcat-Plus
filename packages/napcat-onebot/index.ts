@@ -53,6 +53,7 @@ import { existsSync } from 'node:fs';
 import { IOB11NetworkAdapter } from '@/napcat-onebot/network/adapter';
 import { OB11HttpSSEServerAdapter } from './network/http-server-sse';
 import { OB11PluginMangerAdapter } from './network/plugin-manger';
+import { GScoreAdapter } from './network/gscore';
 
 import { proxiedListenerOf } from '@/napcat-core/helper/proxy-handler';
 import { OneBotFileApi } from './api/file';
@@ -161,7 +162,8 @@ export class NapCatOneBot11Adapter {
     const serviceInfo = await this.creatOneBotLog(ob11Config);
     this.context.logger.log(`[Notice] [OneBot11] ${serviceInfo}`);
 
-    // 创建NetWork服务
+    // 创建NetWork服务。GSCore 连接失败不得阻塞 QQ/OneBot 就绪。
+    this.networkManager.registerAdapter(new GScoreAdapter(this.core, this, this.actions));
 
     // 检查插件目录是否存在，不存在则不加载插件管理器
     if (existsSync(this.context.pathWrapper.pluginPath)) {

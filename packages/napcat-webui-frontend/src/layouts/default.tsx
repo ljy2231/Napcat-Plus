@@ -1,227 +1,52 @@
-import { BreadcrumbItem, Breadcrumbs } from '@heroui/breadcrumbs';
 import { Button } from '@heroui/button';
-import { useLocalStorage } from '@uidotdev/usehooks';
-import clsx from 'clsx';
-import { AnimatePresence, motion } from 'motion/react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
-import { MdMenu, MdMenuOpen } from 'react-icons/md';
-import { useLocation, useNavigate } from 'react-router-dom';
-
-import key from '@/const/key';
-
+import { LuMenu, LuShieldCheck, LuExternalLink } from 'react-icons/lu';
+import { Link, useLocation } from 'react-router-dom';
 import errorFallbackRender from '@/components/error_fallback';
-import PageLoading from '@/components/page_loading';
 import SideBar from '@/components/sidebar';
+import { siteConfig, type MenuItem } from '@/config/site';
 
-import useAuth from '@/hooks/auth';
-import useDialog from '@/hooks/use-dialog';
-
-import type { MenuItem } from '@/config/site';
-import { siteConfig } from '@/config/site';
-import QQManager from '@/controllers/qq_manager';
-import ProcessManager from '@/controllers/process_manager';
-import { waitForBackendReady } from '@/utils/process_utils';
-
-const menus: MenuItem[] = siteConfig.navItems;
-
-const findTitle = (menus: MenuItem[], pathname: string): string[] => {
-  const paths: string[] = [];
-
-  if (pathname) {
-    for (const item of menus) {
-      if (item.href === pathname) {
-        paths.push(item.label);
-      } else if (item.items) {
-        const title = findTitle(item.items, pathname);
-
-        if (title.length > 0) {
-          paths.push(item.label);
-          paths.push(...title);
-        }
-      }
+function findTitle (menus: MenuItem[], pathname: string): string {
+  for (const item of menus) {
+    if (item.href === pathname) return item.label;
+    if (item.items) {
+      const title = findTitle(item.items, pathname);
+      if (title) return title;
     }
   }
+  return '';
+}
 
-  return paths;
-};
-const Layout: React.FC<{ children: React.ReactNode; }> = ({ children }) => {
+/** Management remains accessible before QQ login, including diagnostics and GSCore. */
+export default function Layout ({ children }: { children: React.ReactNode; }) {
   const location = useLocation();
   const contentRef = useRef<HTMLDivElement>(null);
-  const [openSideBar, setOpenSideBar] = useLocalStorage(key.sideBarOpen, true);
-  const [b64img] = useLocalStorage(key.backgroundImage, '');
-  const navigate = useNavigate();
-  const { isAuth, revokeAuth } = useAuth();
-  const dialog = useDialog();
-  const isOnlineRef = useRef(true);
-  const [isRestarting, setIsRestarting] = useState(false);
-
-  // 定期检查 QQ 在线状态，掉线时弹窗提示
+  const [open, setOpen] = useState(false);
+  const closeSidebar = useCallback(() => setOpen(false), []);
+  const title = useMemo(() => findTitle(siteConfig.navItems, location.pathname) || '控制台', [location.pathname]);
   useEffect(() => {
-    if (!isAuth) return;
-    const checkOnlineStatus = async () => {
-      const currentPath = location.pathname;
-      if (currentPath === '/qq_login' || currentPath === '/web_login') return;
-      try {
-        const info = await QQManager.getQQLoginInfo();
-        if (info?.online === false && isOnlineRef.current === true) {
-          isOnlineRef.current = false;
-          dialog.confirm({
-            title: '账号已离线',
-            content: '您的 QQ 账号已掉线，是否重启进程以重新登录？',
-            confirmText: '重启进程',
-            cancelText: '退出账户',
-            onConfirm: async () => {
-              setIsRestarting(true);
-              try {
-                await ProcessManager.restartProcess();
-              } catch (_e) {
-                // 忽略错误，因为后端正在重启关闭连接
-              }
-
-              // 轮询探测后端是否恢复
-              await waitForBackendReady(
-                15000, // 15秒超时
-                () => {
-                  setIsRestarting(false);
-                  window.location.reload();
-                },
-                () => {
-                  setIsRestarting(false);
-                  dialog.alert({
-                    title: '启动超时',
-                    content: '后端在 15 秒内未响应，请检查 NapCat 运行日志或手动重启。',
-                  });
-                }
-              );
-            },
-            onCancel: () => {
-              revokeAuth();
-              navigate('/web_login');
-            },
-          });
-        } else if (info?.online === true) {
-          isOnlineRef.current = true;
-        }
-      } catch (_e) {
-        // 忽略请求错误
-      }
-    };
-    const timer = setInterval(checkOnlineStatus, 5000);
-    checkOnlineStatus();
-    return () => clearInterval(timer);
-  }, [isAuth, location.pathname]);
-
-  const checkIsQQLogin = async () => {
-    try {
-      const result = await QQManager.checkQQLoginStatus();
-      // 掉线状态由 checkOnlineStatus 定期检测并弹窗处理，这里只处理未登录
-      if (result.isOffline) {
-        // 已登录但掉线，标记状态，等待 checkOnlineStatus 弹窗
-        isOnlineRef.current = false;
-      } else if (!result.isLogin) {
-        // 未登录状态：跳转到登录页面
-        if (isAuth) {
-          navigate('/qq_login', { replace: true });
-        } else {
-          navigate('/web_login', { replace: true });
-        }
-      }
-    } catch (_error) {
-      navigate('/web_login', { replace: true });
-    }
-  };
-  useEffect(() => {
-    contentRef?.current?.scrollTo?.({
-      top: 0,
-      behavior: 'smooth',
-    });
+    contentRef.current?.scrollTo({ top: 0 });
+    setOpen(false);
   }, [location.pathname]);
-  useEffect(() => {
-    if (isAuth) {
-      checkIsQQLogin();
-    }
-  }, [isAuth]);
-  const title = useMemo(() => {
-    return findTitle(menus, location.pathname);
-  }, [location.pathname]);
-  return (
-    <div
-      className='h-screen relative flex items-stretch overflow-hidden'
-      style={{
-        backgroundImage: b64img ? `url(${b64img})` : undefined,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-      }}
-    >
-      <PageLoading loading={isRestarting} />
-      <SideBar
-        items={menus}
-        open={openSideBar}
-        onClose={() => setOpenSideBar(false)}
-      />
-      <motion.div
-        layout
-        ref={contentRef}
-        initial={{ opacity: 0, scale: 0.98 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.4 }}
-        className={clsx(
-          'flex-1 overflow-y-auto',
-          'transition-all duration-300 ease-in-out',
-          openSideBar ? 'ml-0' : 'ml-0',
-          'pb-10 md:pb-0'
-        )}
-      >
-        <div
-          className={clsx(
-            'h-10 flex items-center font-bold text-xl backdrop-blur-lg rounded-full',
-            'dark:bg-background dark:shadow-primary-100',
-            'bg-background !bg-opacity-50',
-            'shadow-sm shadow-primary-50',
-            'z-30 m-2 mb-0 sticky top-2 left-0'
-          )}
-        >
-          <div
-            className={clsx(
-              'mr-1 ease-in-out ml-0 md:relative z-50 md:z-auto',
-              openSideBar && 'pl-2',
-              'md:!ml-0 md:pl-0'
-            )}
-          >
-            <Button
-              isIconOnly
-              radius='full'
-              variant='light'
-              onPress={() => setOpenSideBar(!openSideBar)}
-            >
-              {openSideBar ? <MdMenuOpen size={24} /> : <MdMenu size={24} />}
-            </Button>
-          </div>
-          <Breadcrumbs isDisabled size='lg'>
-            {title?.map((item, index) => (
-              <BreadcrumbItem key={index}>
-                <AnimatePresence mode='wait'>
-                  <motion.div
-                    key={item}
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 10 }}
-                    transition={{ duration: 0.3 }}
-                  >
-                    {item}
-                  </motion.div>
-                </AnimatePresence>
-              </BreadcrumbItem>
-            ))}
-          </Breadcrumbs>
+  return <div className='console-shell'>
+    <a href='#console-main' className='console-skip-link'>跳到主要内容</a>
+    <SideBar items={siteConfig.navItems} open={open} onClose={closeSidebar} />
+    <div className='console-workspace' ref={contentRef}>
+      <header className='console-topbar'>
+        <div className='flex min-w-0 items-center gap-3'>
+          <Button isIconOnly variant='light' size='sm' className='lg:hidden' aria-label='打开导航菜单' aria-expanded={open} onPress={() => setOpen(!open)}><LuMenu size={21} /></Button>
+          <span className='console-breadcrumb-root'>控制台</span><span className='text-default-400'>/</span><strong className='truncate text-sm'>{title}</strong>
         </div>
-        <ErrorBoundary fallbackRender={errorFallbackRender}>
-          {children}
-        </ErrorBoundary>
-      </motion.div>
+        <div className='flex shrink-0 items-center gap-4'>
+          <span className='console-session-label'><LuShieldCheck size={15} />管理会话</span>
+          <Link to='/qq_login' className='console-topbar-link'>QQ 登录<LuExternalLink size={14} /></Link>
+        </div>
+      </header>
+      <main id='console-main' className='console-main' tabIndex={-1}>
+        <ErrorBoundary fallbackRender={errorFallbackRender} resetKeys={[location.pathname]}>{children}</ErrorBoundary>
+      </main>
+      <footer className='console-workspace-footer'><span>QQ Bot Console</span><span>基于 NapCat · 独立增强版</span></footer>
     </div>
-  );
-};
-
-export default Layout;
+  </div>;
+}

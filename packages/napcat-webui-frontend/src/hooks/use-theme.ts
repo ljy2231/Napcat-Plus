@@ -1,42 +1,23 @@
-// originally written by @imoaazahmed
 import { useLocalStorage } from '@uidotdev/usehooks';
-import { useEffect, useMemo } from 'react';
+import { useEffect } from 'react';
 
-const ThemeProps = {
-  key: 'theme',
-  light: 'light',
-  dark: 'dark',
-} as const;
-
-type Theme = typeof ThemeProps.light | typeof ThemeProps.dark;
+type Theme = 'light' | 'dark';
 
 export const useTheme = (defaultTheme?: Theme) => {
-  const [theme, setTheme] = useLocalStorage<Theme>(ThemeProps.key, defaultTheme);
-
-  const isDark = useMemo(() => {
-    return theme === ThemeProps.dark;
-  }, [theme]);
-
-  const isLight = useMemo(() => {
-    return theme === ThemeProps.light;
-  }, [theme]);
-
-  const _setTheme = (theme: Theme) => {
-    setTheme(theme);
-    document.documentElement.classList.remove(ThemeProps.light, ThemeProps.dark);
-    document.documentElement.classList.add(theme);
-  };
-
-  const setLightTheme = () => _setTheme(ThemeProps.light);
-
-  const setDarkTheme = () => _setTheme(ThemeProps.dark);
-
-  const toggleTheme = () =>
-    theme === ThemeProps.dark ? setLightTheme() : setDarkTheme();
-
+  const preferred = defaultTheme ?? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  const [storedTheme, setTheme] = useLocalStorage<Theme>('theme', preferred);
+  const theme: Theme = storedTheme === 'dark' ? 'dark' : 'light';
   useEffect(() => {
-    _setTheme(theme);
-  });
-
-  return { theme, isDark, isLight, setLightTheme, setDarkTheme, toggleTheme };
+    document.documentElement.classList.remove('light', 'dark');
+    document.documentElement.classList.add(theme);
+    document.documentElement.style.colorScheme = theme;
+  }, [theme]);
+  return {
+    theme,
+    isDark: theme === 'dark',
+    isLight: theme === 'light',
+    setLightTheme: () => setTheme('light'),
+    setDarkTheme: () => setTheme('dark'),
+    toggleTheme: () => setTheme(theme === 'dark' ? 'light' : 'dark'),
+  };
 };

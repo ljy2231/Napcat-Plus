@@ -1,85 +1,115 @@
-<img src="https://napneko.github.io/assets/newnewlogo.png" width = "305" height = "411" alt="NapCat" align=right />
-<div align="center">
+# QQ Bot Console
 
-# NapCat
+基于 NapCatQQ 最后保留的完整源码，面向自托管 QQ 机器人的增强控制台。重点是**可诊断的登录流程、内置 GSCore 连接管理、清晰的 WebUI 和可重复部署**，不是只更换名称的上游镜像。
 
-_Modern protocol-side framework implemented based on NTQQ._
+> 非腾讯官方产品，也不代表 NapCat 原作者。账号风控、平台协议变化和上游原生依赖仍可能影响可用性。不得用于骚扰、垃圾消息或未经授权的账号操作。
 
-> 云起兮风生，心向远方兮路未曾至.
+## 来源与许可
 
-</div>
+- 基线：[`ljy2231/NapCatQQ@72912f2`](https://github.com/ljy2231/NapCatQQ/commit/72912f293924f43463b5976b01fc094a8ae11481)，2026-11-10，`docs: ending`；保留此前 Git 历史。
+- 原项目：[`NapNeko/NapCatQQ`](https://github.com/NapNeko/NapCatQQ)，Copyright © 2024 Mlikiowa。
+- 完整保留 [上游许可证](<LICENSE>) 与第三方版权声明。**这不是 MIT/Apache 项目，公开可见不等于可以任意再发布或商用。** 修改、公开发布及二次分发必须满足原许可证与另行取得的授权；本仓库不向下游授予超出上游的权利。
+- 原上游发布流程已归档，不会再向 NapNeko 的文档、镜像、API 平台或其他仓库写入。
 
----
+## 主要改造
 
-## Welcome
+### 登录稳定性
 
-- NapCatQQ is a modern implementation of the Bot protocol based on NTQQ.
-  - NapCatQQ 是现代化的基于 NTQQ 的 Bot 协议端实现
+- 初始化 QQ 原生层之前注册登录监听器，缓存早到的连接事件。
+- 等待原生配置、历史账号列表和 WebUI 自动登录策略就绪后再启动登录。
+- 连接代次与单飞控制避免重复登录；断线使旧事件失效。
+- 超时提供具体阶段而非无限转圈；失败不无限重试密码；成功不被迟到错误覆盖。
+- 保留二维码、快捷登录、密码及验证流程。
 
-## Feature
+### 原生 GSCore 集成
 
-- **Easy to Use**
-  - 作为初学者能够轻松使用.
-- **Quick and Efficient**
-  - 在低内存操作系统长时运行.
-- **Rich API Interface**
-  - 完整实现了大部分标准接口.
-- **Stable and Reliable**
-  - 持续稳定的开发与维护.
+内置 GSUID Core WebSocket 适配器，不需要把第三方插件伪装为 `napcat-plugin-builtin`。
 
-## Quick Start
+- 可视化开关、地址、Token、有限指数退避、手动重连、真实连接状态。
+- 热更新使用连接代次，旧连接的迟到 `close/error` 不会清空新连接。
+- Token 不在状态/配置读取 API 中回显，省略保留、空字符串清除；本地配置权限为 `0600`。
+- 支持群聊/私聊文本、@、回复、图片/语音/视频；出站支持基本合并转发及远程文件。
+- 不提供任意 OneBot 动作执行；拒绝跨账号目标和从 GSCore 请求读取本机文件。
+- 默认关闭。启用后应**停用旧 GSCore 桥接插件**，避免重复收发。
 
-可前往 [Release](https://github.com/NapNeko/NapCatQQ/releases/) 页面下载最新版本
+### 内置工具
 
-**首次使用**请务必查看如下文档看使用教程
+- **聊天与事件**：保留原有 OneBot 实时消息/聊天入口。
+- **缓存清理**：日志/临时缓存先预览、再确认删除，60 秒一次性预览；默认不运行定时清理，不动 QQ 数据库。
+- **插件调试**：已鉴权的插件状态、开关和手动热重载；不额外开放调试 WebSocket 端口。
+- SSQQ / Stapxs QQ Lite **未捆绑**：插件外壳与客户端使用不同许可证，且预构建包还含字体/远程资源。详见 [SSQQ 来源与许可核对](<docs/ssqq-integration.md>)；用户仍可单独安装合规版本。
 
-> 项目非盈利，涉及 对接问题/基础问题/下层框架问题 请自行搜索解决，本项目社区不提供此类解答。
+GSCore 是受信任服务：开启后会转发 QQ 消息并接受指定聊天的回复。仅连接自己管理的实例；公网连接使用 `wss://` 和 Token。其连接协议参考 [GSUID Core 消息模型](https://github.com/Genshin-bots/gsuid_core/blob/master/gsuid_core/models.py)。不声称兼容所有插件扩展（撤回回执、频道、复杂节点等需另行适配）。
 
-## Link
+### 控制台与部署
 
-| Docs | [![Github.IO](https://img.shields.io/badge/docs%20on-Github.IO-orange)](https://napneko.github.io/) | [![Cloudflare.Worker](https://img.shields.io/badge/docs%20on-Cloudflare.Worker-black)](https://doc.napneko.icu/) | [![Cloudflare.HKServer](https://img.shields.io/badge/docs%20on-Cloudflare.HKServer-informational)](https://napcat.napneko.icu/) |
-|:-:|:-:|:-:|:-:|
+- 中文控制台、深浅主题、响应式导航，保留原 OneBot/聊天/文件/插件功能。
+- QQ 未登录时仍可查看诊断和管理 GSCore 配置。
+- 基于源码构建 WebUI 与 Shell；固定 QQ 运行时镜像摘要。
+- GitHub CI：类型检查、测试、构建；独立 GHCR 工作流仅发布本仓库镜像。
+- 默认阻止上游在线更新覆盖增强功能，升级使用本项目固定镜像。
 
-| Docs | [![Cloudflare.Pages](https://img.shields.io/badge/docs%20on-Cloudflare.Pages-blue)](https://napneko.pages.dev/) | [![Server.Other](https://img.shields.io/badge/docs%20on-Server.Other-green)](https://napcat.top/) | [![NapCat.Top](https://img.shields.io/badge/docs%20on-NapCat.Top-red)](https://napcat.top/) |
-|:-:|:-:|:-:|:-:|
+## 本地开发
 
-| QQ Group | [![NapCat Family Group 4](https://img.shields.io/badge/NapCat%20Family%20Group%204-Join-blue)](https://qm.qq.com/q/E4nfkGD6oK) | [![NapCat Family Group 3](https://img.shields.io/badge/NapCat%20Family%20Group%203-Join-blue)](https://qm.qq.com/q/XyiyGPqa42) | [![NapCat Family Group 2](https://img.shields.io/badge/NapCat%20Family%20Group%202-Join-blue)](https://qm.qq.com/q/gq18RH7o7S) | [![NapCat Family Group 1](https://img.shields.io/badge/NapCat%20Family%20Group%201-Join-blue)](https://qm.qq.com/q/VwpnklcXqo) |
-|:-:|:-:|:-:|:-:|:-:|
+需要 Node.js 24 与 pnpm 9.15.9。
 
-| Telegram | [![Telegram](https://img.shields.io/badge/Telegram-napcatqq-blue)](https://t.me/napcatqq) |
-|:-:|:-:|
+```bash
+corepack enable
+pnpm install --frozen-lockfile --ignore-scripts
+pnpm run typecheck
+pnpm --filter napcat-test exec vitest run
+pnpm run build:webui
+pnpm run build:shell
+```
 
-| DeepWiki | [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/NapNeko/NapCatQQ) |
-|:-:|:-:|
+依赖安装默认不执行生命周期脚本；原生 QQ 测试需要相应运行环境，不能由纯单元测试替代。
 
-> QQ群因为特殊原因需要入群密钥，请在webui关于页面获取，仅最新的100个版本以内有效。
+## Docker 快速开始
 
-社区相关日后会进一步加强审核，并严格限制一定时间的入群人数，请具备一定编程基础和问题解决能力再申请入群。
+当前镜像构建目标为 **Linux amd64**。运行时基础为 QQ `3.2.34-53644`，不在安装时自动拉取新版 QQ。
 
-[困困猫猫的高中](https://qm.qq.com/q/14aUVclRUA)
+```bash
+cp deploy/.env.example deploy/.env
+# 编辑 deploy/.env，将 WEBUI_TOKEN 改为随机强密码
+# 可生成：openssl rand -hex 24
 
-## Thanks
+docker compose --env-file deploy/.env -f deploy/compose.yaml up -d --build
+```
 
-- [Lagrange](https://github.com/LagrangeDev/Lagrange.Core) 对本项目的大力支持 参考部分代码 已获授权
+默认仅监听 `127.0.0.1:6099`，打开 `http://127.0.0.1:6099/webui/`。远程使用 SSH 隧道或受保护的 HTTPS 反向代理，不建议裸露管理端口。容器保留原入口与挂载路径：
 
-- [AstrBot](https://github.com/AstrBotDevs/AstrBot) 是完美适配本项目的LLM Bot框架 在此推荐一下
+| 持久化卷 | 容器位置 |
+| --- | --- |
+| `qq-data` | `/app/.config/QQ` |
+| `console-config` | `/app/napcat/config` |
+| `console-plugins` | `/app/napcat/plugins` |
 
-- [MaiBot](https://github.com/MaiM-with-u/MaiBot) 一只赛博群友 麦麦 Bot框架 在此推荐一下
+**不要执行 `docker compose down -v`，否则会删除持久化卷。**
 
-- [qq-chat-exporter](https://github.com/shuakami/qq-chat-exporter/) 基于NapCat的消息导出工具 在此推荐一下
+### 连接 GSCore
 
-- 不过最最重要的 还是需要感谢屏幕前的你哦~
+将 GSCore 和 Console 加入同一个 Docker 网络，在控制台填写 `ws://<GSCore服务名>:8765`。如果 GSCore 使用 `network_mode: service:...` 或共享代理容器网络，应填那个网络容器的服务名。`localhost` 指当前 Console 容器，不是宿主机或另一个容器。无需为容器间通信开放公网端口。
 
----
-## Ending
-如果感兴趣可以自行Fork，不再提供除版本更新以外内容，直到失效，如果追求稳定性更推荐官方Bot，非常感谢一路陪伴。
+仅保存地址不代表连通：QQ 登录后看连接状态与诊断结果。GSCore 服务本身不由示例 Compose 自动安装，避免未经确认引入不固定的镜像或修改已有服务。
 
-## License
+## 自动构建与发布
 
-本项目采用 混合协议 开源，因此使用本项目时，你需要注意以下几点：
+- 分支推送/PR：只读权限运行 CI，不使用 `pull_request_target` 执行不可信代码。
+- 推送 `v*` 标签：构建并推送 `ghcr.io/ljy2231/qq-bot-console`。
+- 手动镜像构建默认不发布；选择 `publish` 后才推送。首次 GHCR 包的可见性可在 GitHub Packages 中设置。
+- GHCR 只使用该仓库 `GITHUB_TOKEN`，不需要把个人 Token 写入代码或工作流。
+- 本地构建可覆盖 `QQ_RUNTIME` 参数，但必须重新验证对应 QQ 版本兼容性。
 
-1. 第三方库代码或修改部分遵循其原始开源许可.
-2. 本项目获取部分项目授权而不受部分约束
-2. 项目其余逻辑代码采用[本仓库开源许可](./LICENSE).
+## 升级与回滚
 
-**本仓库仅用于提高易用性，实现消息推送类功能，此外，禁止任何项目未经仓库主作者授权基于 NapCat 代码开发。使用请遵守当地法律法规，由此造成的问题由使用者和提供违规使用教程者负责。**
+先停止旧实例并备份三个持久化目录/卷。切换镜像时继续绑定原路径，**不要让新旧实例同时使用同一 QQ 账号数据**。保留旧镜像标签与配置归档，失败时停止新实例再回滚。数据库格式跨版本兼容性需单独验证。
+
+已有第三方 GSCore 插件的配置不会自动导入内置连接，避免未知凭据迁移和重复转发。请确认旧插件已停用后，在新页面显式填写配置。
+
+## 安全与测试边界
+
+- 不要提交 `.env`、QQ 数据库、日志、二维码、用户插件 Token 或容器 inspect。
+- 构建上下文与 Git ignore 已排除常见运行数据；发布前仍应审查暂存区。
+- 默认在线更新禁用；显式设 `QQ_BOT_CONSOLE_PINNED=0` 会恢复旧更新逻辑，但可能覆盖此分支，不建议使用。
+- 网络故障、风控和其他插件故障不在“永久修复”的保证范围内。
+- 测试结果、已知限制与变更范围见 [改造说明](<docs/console-changes.md>)。

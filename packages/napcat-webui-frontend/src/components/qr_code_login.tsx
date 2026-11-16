@@ -1,7 +1,7 @@
 import { Button } from '@heroui/button';
 import { Spinner } from '@heroui/spinner';
 import { QRCodeSVG } from 'qrcode.react';
-import { IoAlertCircle, IoRefresh } from 'react-icons/io5';
+import { LuCircleAlert, LuRefreshCw, LuScanLine } from 'react-icons/lu';
 
 interface QrCodeLoginProps {
   qrcode: string;
@@ -12,91 +12,20 @@ interface QrCodeLoginProps {
   isRecoveringLoginService?: boolean;
 }
 
-const QrCodeLogin: React.FC<QrCodeLoginProps> = ({ qrcode, loginError, onRefresh, isRefreshing = false, loginPhase, isRecoveringLoginService = false }) => {
-  const transitionMessage = loginPhase === 'qrcode_scanned'
-    ? '二维码已扫描，等待手机确认…'
-    : loginPhase === 'initializing'
-      ? 'QQ 登录成功，正在启动 NapCat…'
-      : loginPhase === 'reconnecting' || isRecoveringLoginService
-        ? '正在重新连接 QQ 登录服务…'
-        : undefined;
-  return (
-    <div className='flex flex-col items-center'>
-      {(isRefreshing || transitionMessage) && (
-        <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm'>
-          <div className='flex flex-col items-center gap-4 rounded-xl bg-content1 px-10 py-8 shadow-xl'>
-            <Spinner color='primary' size='lg' />
-            <div className='text-lg font-medium'>{transitionMessage || '正在刷新二维码…'}</div>
-            <div className='text-sm text-default-500'>
-              {transitionMessage ? '请不要关闭此页面，最长可能需要 3 分钟' : '正在等待新的二维码，最长 10 秒'}
-            </div>
-          </div>
-        </div>
-      )}
-      {loginError && !qrcode && !isRecoveringLoginService
-        ? (
-          <div className='flex flex-col items-center py-4'>
-            <div className='w-full flex justify-center mb-6'>
-              <div className='p-4 bg-danger-50 rounded-full'>
-                <IoAlertCircle className='text-danger' size={64} />
-              </div>
-            </div>
-            <div className='text-center space-y-2 px-4'>
-              <div className='text-xl font-bold text-danger'>登录失败</div>
-              <div className='text-default-600 text-sm leading-relaxed max-w-[300px]'>
-                {loginError}
-              </div>
-            </div>
-            {onRefresh && (
-              <Button
-                className='mt-8 min-w-[160px]'
-                variant='solid'
-                color='primary'
-                size='lg'
-                startContent={<IoRefresh />}
-                onPress={onRefresh}
-                isLoading={isRefreshing}
-                isDisabled={isRefreshing}
-              >
-                重新获取二维码
-              </Button>
-            )}
-          </div>
-        )
-        : (
-          <>
-            {loginError && (
-              <div className='mb-4 w-full max-w-[360px] rounded-lg bg-warning-50 px-4 py-3 text-center text-sm text-warning-700 dark:bg-warning-50/20 dark:text-warning-300'>
-                {loginError}
-              </div>
-            )}
-            <div className='bg-white p-2 rounded-md w-fit mx-auto relative overflow-hidden'>
-              {!qrcode && (
-                <div className='absolute left-0 top-0 right-0 bottom-0 bg-white dark:bg-zinc-900 bg-opacity-90 backdrop-blur-sm flex items-center justify-center z-10'>
-                  <Spinner color='primary' />
-                </div>
-              )}
-              <QRCodeSVG key={qrcode} size={180} value={qrcode || ' '} />
-            </div>
-            <div className='mt-5 text-center text-default-500 text-sm'>请使用QQ或者TIM扫描上方二维码</div>
-            {onRefresh && qrcode && (
-              <Button
-                className='mt-4'
-                variant='flat'
-                color='primary'
-                size='sm'
-                startContent={<IoRefresh />}
-                onPress={onRefresh}
-                isLoading={isRefreshing}
-                isDisabled={isRefreshing}
-              >
-                刷新二维码
-              </Button>
-            )}
-          </>
-        )}
+export default function QrCodeLogin ({ qrcode, loginError, onRefresh, isRefreshing = false, loginPhase, isRecoveringLoginService = false }: QrCodeLoginProps) {
+  const transitionMessage = loginPhase === 'qrcode_scanned' ? '已扫描，请在手机 QQ 上确认' : loginPhase === 'initializing' ? '已确认登录，正在启动核心服务' : loginPhase === 'reconnecting' || isRecoveringLoginService ? '正在恢复 QQ 登录服务' : isRefreshing ? '正在请求新的二维码' : '';
+  const cannotRefresh = isRefreshing || isRecoveringLoginService || ['qrcode_scanned', 'initializing', 'reconnecting'].includes(loginPhase || '');
+  return <div className='flex flex-col items-center gap-5'>
+    {transitionMessage && <div role='status' className='console-qr-notice w-full'><Spinner size='sm' /><span>{transitionMessage}。请保留此页面，状态将自动更新。</span></div>}
+    {loginError && <div className='flex gap-2 rounded-lg bg-danger-50 p-3 text-danger text-xs leading-relaxed w-full' role='alert'><LuCircleAlert size={17} className='shrink-0 mt-0.5' /><span>{loginError}</span></div>}
+    <div className='console-qr-frame'>
+      {qrcode && !isRefreshing ? <QRCodeSVG key={qrcode} size={180} value={qrcode} title='QQ 登录二维码，请使用手机 QQ 扫描' /> : <div className='flex flex-col items-center gap-3 px-4 py-8 text-center text-slate-500'>
+        {loginError ? <LuCircleAlert size={30} /> : <Spinner color='primary' />}
+        <span className='text-xs max-w-40 leading-relaxed'>{loginError ? '暂时无法取得二维码' : '等待 QQ 服务生成二维码'}</span>
+      </div>}
     </div>
-  );
-};
-
-export default QrCodeLogin;
+    <div className='flex items-center gap-2 text-xs text-default-500'><LuScanLine size={16} />使用手机 QQ 扫码并确认登录</div>
+    {onRefresh && <Button variant='flat' color='primary' size='sm' startContent={!isRefreshing && <LuRefreshCw />} onPress={onRefresh} isLoading={isRefreshing} isDisabled={cannotRefresh}>{qrcode ? '刷新二维码' : '重新获取二维码'}</Button>}
+    <p className='text-[11px] text-default-400 text-center leading-relaxed'>二维码仅用于本次登录，请勿转发。未收到二维码时不会显示占位二维码。</p>
+  </div>;
+}

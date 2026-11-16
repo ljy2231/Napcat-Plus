@@ -20,11 +20,13 @@ import { ProcessRouter } from './Process';
 import { PluginRouter } from './Plugin';
 import { MirrorRouter } from './Mirror';
 import { NapCatConfigRouter } from './NapCatConfig';
+import { ConsoleRouter } from './Console';
 
 const router: Router = Router();
 
 // 鉴权中间件
 router.use(auth);
+router.use('/Console', ConsoleRouter);
 
 // router:测试用
 router.all('/test', (_, res) => {

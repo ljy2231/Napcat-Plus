@@ -1,426 +1,123 @@
 import { Button } from '@heroui/button';
-import { CardBody, CardHeader } from '@heroui/card';
-import { Image } from '@heroui/image';
 import { Input } from '@heroui/input';
 import { useLocalStorage } from '@uidotdev/usehooks';
 import { useEffect, useRef, useState } from 'react';
-import { toast } from 'react-hot-toast';
-import { IoKeyOutline, IoArrowBack } from 'react-icons/io5';
+import { LuArrowLeft, LuArrowRight, LuCable, LuFingerprint, LuKeyRound, LuLayoutDashboard, LuShieldCheck } from 'react-icons/lu';
 import { useNavigate } from 'react-router-dom';
-
-import logo from '@/assets/images/logo.png';
-
 import key from '@/const/key';
-
-import HoverEffectCard from '@/components/effect_card';
-import { title } from '@/components/primitives';
-import { ThemeSwitch } from '@/components/theme-switch';
-
 import WebUIManager from '@/controllers/webui_manager';
 import PureLayout from '@/layouts/pure';
-import { motion } from 'motion/react';
 
-// Passkey 检查的最长等待时间。部分手机浏览器在本机没有对应 Passkey 时，
-// navigator.credentials.get 会一直不返回，不能让它无限期占住登录流程。
 const PASSKEY_TIMEOUT_MS = 30_000;
+const decode = (value: string): Uint8Array => Uint8Array.from(atob(value.replace(/-/g, '+').replace(/_/g, '/')), (char) => char.charCodeAt(0));
+const encode = (value: ArrayBuffer): string => btoa(String.fromCharCode(...new Uint8Array(value))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 
 export default function WebLoginPage () {
-  const urlSearchParams = new URLSearchParams(window.location.search);
-  const token = urlSearchParams.get('token');
+  const initialToken = useRef(new URLSearchParams(window.location.search).get('token') || '');
   const navigate = useNavigate();
-  const [tokenValue, setTokenValue] = useState<string>(token || '');
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [isPasskeyLoading, setIsPasskeyLoading] = useState<boolean>(true); // 初始为true，表示正在检查passkey
-  const passkeyAbortRef = useRef<AbortController | null>(null);
-  const [, setLocalToken] = useLocalStorage<string>(key.token, '');
+  const [token, setToken] = useState(initialToken.current);
+  const [loading, setLoading] = useState(false);
+  const [passkeyLoading, setPasskeyLoading] = useState(false);
+  const [require2FA, setRequire2FA] = useState(false);
+  const [totp, setTotp] = useState('');
+  const [pendingToken, setPendingToken] = useState('');
+  const [error, setError] = useState('');
+  const [, setCredential] = useLocalStorage<string>(key.token, '');
+  const abort = useRef<AbortController | null>(null);
+  const submitting = useRef(false);
+  const mounted = useRef(true);
 
-  // 2FA相关状态
-  const [require2FA, setRequire2FA] = useState<boolean>(false);
-  const [totpCode, setTotpCode] = useState<string>('');
-  const [pendingToken, setPendingToken] = useState<string>('');
-
-  // Helper function to decode base64url
-  function base64UrlToUint8Array (base64Url: string): Uint8Array {
-    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-    const binaryString = atob(base64);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
-    }
-    return bytes;
-  }
-
-  // Helper function to encode Uint8Array to base64url
-  function uint8ArrayToBase64Url (uint8Array: Uint8Array): string {
-    const base64 = btoa(String.fromCharCode(...uint8Array));
-    return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-  }
-
-  // 自动检查并尝试passkey登录
-  const tryPasskeyLogin = async () => {
-    if (!navigator.credentials || !navigator.credentials.get) {
-      // toast.error('当前浏览器/环境不支持 Passkey 登录。');
-      return;
-    }
-    const controller = new AbortController();
-    passkeyAbortRef.current = controller;
-    const timer = setTimeout(() => controller.abort(), PASSKEY_TIMEOUT_MS);
+  const submit = async (inputToken = token, code?: string) => {
+    if (submitting.current) return;
+    if (!inputToken.trim()) { setError('请输入管理 Token。'); return; }
+    if (require2FA && (!code || !/^\d{6}$/.test(code))) { setError('请输入验证器中的 6 位验证码。'); return; }
+    abort.current?.abort();
+    submitting.current = true; setLoading(true); setError('');
     try {
-      // 检查是否有passkey
-      const options = await WebUIManager.generatePasskeyAuthenticationOptions();
+      const data = await WebUIManager.loginWithToken(inputToken, code);
+      if (!mounted.current) return;
+      if (data?.require2FA) { setRequire2FA(true); setPendingToken(inputToken); return; }
+      if (!data?.Credential) throw new Error('服务未返回有效的管理凭据，请重试。');
+      setCredential(data.Credential);
+      // Remove bootstrap tokens from browser history after successful auth.
+      navigate('/', { replace: true });
+    } catch (cause) { if (mounted.current) setError((cause as Error).message); }
+    finally { submitting.current = false; if (mounted.current) setLoading(false); }
+  };
 
-      // 如果有passkey，自动进行认证
+  const passkey = async () => {
+    if (abort.current || loading || passkeyLoading) return;
+    if (!navigator.credentials?.get) { setError('当前浏览器或连接环境不支持 Passkey，请使用 Token 登录。'); return; }
+    const controller = new AbortController(); abort.current = controller;
+    const timer = setTimeout(() => controller.abort(), PASSKEY_TIMEOUT_MS);
+    setPasskeyLoading(true); setError('');
+    try {
+      const options = await WebUIManager.generatePasskeyAuthenticationOptions();
       const credential = await navigator.credentials.get({
         publicKey: {
-          challenge: base64UrlToUint8Array(options.challenge) as BufferSource,
-          allowCredentials: options.allowCredentials?.map((cred: any) => ({
-            id: base64UrlToUint8Array(cred.id) as BufferSource,
-            type: cred.type,
-            transports: cred.transports,
-          })),
+          challenge: decode(options.challenge) as BufferSource,
+          allowCredentials: options.allowCredentials?.map((item: { id: string; type: PublicKeyCredentialType; transports?: AuthenticatorTransport[]; }) => ({ ...item, id: decode(item.id) as BufferSource })),
           userVerification: options.userVerification,
           timeout: PASSKEY_TIMEOUT_MS,
         },
         signal: controller.signal,
-      }) as PublicKeyCredential;
-
-      if (!credential) {
-        throw new Error('Passkey authentication cancelled');
-      }
-
-      // 准备响应进行验证 - 转换为base64url字符串格式
-      const authResponse = credential.response as AuthenticatorAssertionResponse;
-      const response = {
-        id: credential.id,
-        rawId: uint8ArrayToBase64Url(new Uint8Array(credential.rawId)),
-        response: {
-          authenticatorData: uint8ArrayToBase64Url(new Uint8Array(authResponse.authenticatorData)),
-          clientDataJSON: uint8ArrayToBase64Url(new Uint8Array(authResponse.clientDataJSON)),
-          signature: uint8ArrayToBase64Url(new Uint8Array(authResponse.signature)),
-          userHandle: authResponse.userHandle ? uint8ArrayToBase64Url(new Uint8Array(authResponse.userHandle)) : null,
-        },
-        type: credential.type,
-      };
-
-      // 验证认证
-      const data = await WebUIManager.verifyPasskeyAuthentication(response);
-
-      // 用户已改用 Token 登录，不再用 Passkey 的结果覆盖
-      if (controller.signal.aborted) {
-        return false;
-      }
-      if (data && data.Credential) {
-        setLocalToken(data.Credential);
-        navigate('/qq_login', { replace: true });
-        return true; // 登录成功
-      }
-    } catch (error) {
-      // passkey登录失败，继续显示token登录界面
-      console.log('Passkey login failed or not available:', error);
+      }) as PublicKeyCredential | null;
+      if (!credential) throw new Error('Passkey 验证已取消。');
+      const response = credential.response as AuthenticatorAssertionResponse;
+      const data = await WebUIManager.verifyPasskeyAuthentication({
+        id: credential.id, rawId: encode(credential.rawId), type: credential.type,
+        response: { authenticatorData: encode(response.authenticatorData), clientDataJSON: encode(response.clientDataJSON), signature: encode(response.signature), userHandle: response.userHandle ? encode(response.userHandle) : null },
+      });
+      if (controller.signal.aborted || !mounted.current) return;
+      if (!data?.Credential) throw new Error('Passkey 验证未返回管理凭据。');
+      setCredential(data.Credential); navigate('/', { replace: true });
+    } catch (cause) {
+      if (mounted.current && !submitting.current) setError(controller.signal.aborted ? 'Passkey 验证超时或已取消，可以使用 Token 继续。' : (cause as Error).message);
     } finally {
       clearTimeout(timer);
-      if (passkeyAbortRef.current === controller) {
-        passkeyAbortRef.current = null;
-      }
-    }
-    return false; // 登录失败
-  };
-
-  // 第一次登录（输入token）
-  const onSubmitToken = async () => {
-    if (!tokenValue) {
-      toast.error('请输入token');
-      return;
-    }
-    // 改用 Token 登录时放弃仍在等待的 Passkey 验证
-    passkeyAbortRef.current?.abort();
-    setIsLoading(true);
-    try {
-      const data = await WebUIManager.loginWithToken(tokenValue);
-
-      if (data) {
-        if (data.require2FA) {
-          // 需要2FA验证
-          setRequire2FA(true);
-          setPendingToken(tokenValue);
-          setIsLoading(false);
-          return;
-        }
-
-        // 不需要2FA，直接登录
-        if (data.Credential) {
-          setLocalToken(data.Credential);
-        }
-        navigate('/qq_login', { replace: true });
-      }
-    } catch (error) {
-      toast.error((error as Error).message);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // 2FA验证提交
-  const onSubmit2FA = async () => {
-    if (!totpCode || totpCode.length !== 6) {
-      toast.error('Please enter 6-digit code');
-      return;
-    }
-    setIsLoading(true);
-    try {
-      const data = await WebUIManager.loginWithToken(pendingToken, totpCode);
-
-      if (data && data.Credential) {
-        setLocalToken(data.Credential);
-        navigate('/qq_login', { replace: true });
-      }
-    } catch (error) {
-      toast.error((error as Error).message);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // 返回token输入步骤
-  const goBackToToken = () => {
-    setRequire2FA(false);
-    setTotpCode('');
-    setPendingToken('');
-  };
-
-  // 处理全局键盘事件
-  const handleKeyDown = (e: KeyboardEvent) => {
-    if (e.key === 'Enter' && !isLoading) {
-      if (require2FA) {
-        onSubmit2FA();
-      } else {
-        onSubmitToken();
-      }
+      if (abort.current === controller) abort.current = null;
+      if (mounted.current) setPasskeyLoading(false);
     }
   };
 
   useEffect(() => {
-    document.addEventListener('keydown', handleKeyDown);
-
-    // 清理函数
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [tokenValue, totpCode, isLoading, require2FA]); // 依赖项包含用于登录的状态
-
-  useEffect(() => {
-    // 如果URL中有token，直接登录
-    if (token) {
-      // 不需要检查passkey，立即清除loading状态，避免登录失败后输入框被永久禁用
-      setIsPasskeyLoading(false);
-      onSubmitToken();
-      return;
-    }
-
-    // 否则尝试passkey自动登录
-    tryPasskeyLogin().finally(() => {
-      setIsPasskeyLoading(false);
-    });
-    return () => {
-      passkeyAbortRef.current?.abort();
-    };
+    mounted.current = true;
+    if (initialToken.current) void submit(initialToken.current);
+    return () => { mounted.current = false; abort.current?.abort(); };
   }, []);
 
-  return (
-    <>
-      <title>WebUI登录 - NapCat WebUI</title>
-      <PureLayout>
-        <motion.div
-          initial={{ opacity: 0, y: 20, scale: 0.95 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.5, type: 'spring', stiffness: 120, damping: 20 }}
-          className='w-[608px] max-w-full py-8 px-2 md:px-8 overflow-hidden'
-        >
-          <HoverEffectCard
-            className='items-center gap-4 pt-0 pb-6 bg-default-50'
-            maxXRotation={3}
-            maxYRotation={3}
-          >
-            <CardHeader className='inline-block max-w-lg text-center justify-center'>
-              <div className='flex items-center justify-center w-full gap-2 pt-10'>
-                <Image alt='logo' height='7em' src={logo} />
-                <div>
-                  <span className={title()}>Web&nbsp;</span>
-                  <span className={title({ color: 'violet' })}>
-                    Login&nbsp;
-                  </span>
-                </div>
-              </div>
-              <ThemeSwitch className='absolute right-4 top-4' />
-            </CardHeader>
-
-            <CardBody className='flex gap-5 py-5 px-5 md:px-10'>
-              {isPasskeyLoading && (
-                <div className='text-center text-small text-default-600 dark:text-default-400 px-2'>
-                  🔐 正在检查Passkey，也可以直接输入Token登录
-                </div>
-              )}
-
-              {/* 2FA验证步骤 */}
-              {require2FA
-                ? (
-                  <>
-                    <Button
-                      isIconOnly
-                      variant='light'
-                      className='self-start -ml-2'
-                      onPress={goBackToToken}
-                    >
-                      <IoArrowBack size={20} />
-                    </Button>
-                    <div className='text-center text-default-600 dark:text-default-400'>
-                      请输入Authenticator中的验证码
-                    </div>
-                    <form
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        onSubmit2FA();
-                      }}
-                    >
-                      <Input
-                        type='text'
-                        inputMode='numeric'
-                        pattern='[0-9]*'
-                        maxLength={6}
-                        classNames={{
-                          label: 'text-black/50 dark:text-white/90',
-                          input: [
-                            'bg-transparent',
-                            'text-black/90 dark:text-white/90',
-                            'placeholder:text-default-700/50 dark:placeholder:text-white/60',
-                          ],
-                          innerWrapper: 'bg-transparent',
-                          inputWrapper: [
-                            'shadow-xl',
-                            'bg-default-100/70',
-                            'dark:bg-default/60',
-                            'backdrop-blur-xl',
-                            'backdrop-saturate-200',
-                            'hover:bg-default-0/70',
-                            'dark:hover:bg-default/70',
-                            'group-data-[focus=true]:bg-default-100/50',
-                            'dark:group-data-[focus=true]:bg-default/60',
-                            '!cursor-text',
-                          ],
-                        }}
-                        isDisabled={isLoading}
-                        label='验证码'
-                        placeholder='请输入6位验证码'
-                        radius='lg'
-                        size='lg'
-                        startContent={
-                          <IoKeyOutline className='text-black/50 mb-0.5 dark:text-white/90 text-slate-400 pointer-events-none flex-shrink-0' />
-                      }
-                        value={totpCode}
-                        onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, ''))}
-                      />
-                    </form>
-                    <Button
-                      className='mx-10 mt-10 text-lg py-7'
-                      color='primary'
-                      isLoading={isLoading}
-                      radius='full'
-                      size='lg'
-                      variant='shadow'
-                      onPress={onSubmit2FA}
-                    >
-                      验证
-                    </Button>
-                  </>
-                )
-                : (
-                  <>
-                    <form
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        onSubmitToken();
-                      }}
-                    >
-                      {/* 隐藏的用户名字段，帮助浏览器识别登录表单 */}
-                      <input
-                        type='text'
-                        name='username'
-                        value='napcat-webui'
-                        autoComplete='username'
-                        className='absolute -left-[9999px] opacity-0 pointer-events-none'
-                        readOnly
-                        tabIndex={-1}
-                        aria-label='Username'
-                      />
-                      <Input
-                        isClearable
-                        type='password'
-                        name='password'
-                        autoComplete='current-password'
-                        classNames={{
-                          label: 'text-black/50 dark:text-white/90',
-                          input: [
-                            'bg-transparent',
-                            'text-black/90 dark:text-white/90',
-                            'placeholder:text-default-700/50 dark:placeholder:text-white/60',
-                          ],
-                          innerWrapper: 'bg-transparent',
-                          inputWrapper: [
-                            'shadow-xl',
-                            'bg-default-100/70',
-                            'dark:bg-default/60',
-                            'backdrop-blur-xl',
-                            'backdrop-saturate-200',
-                            'hover:bg-default-0/70',
-                            'dark:hover:bg-default/70',
-                            'group-data-[focus=true]:bg-default-100/50',
-                            'dark:group-data-[focus=true]:bg-default/60',
-                            '!cursor-text',
-                          ],
-                        }}
-                        isDisabled={isLoading}
-                        label='Token'
-                        placeholder='请输入token'
-                        radius='lg'
-                        size='lg'
-                        startContent={
-                          <IoKeyOutline className='text-black/50 mb-0.5 dark:text-white/90 text-slate-400 pointer-events-none flex-shrink-0' />
-                      }
-                        value={tokenValue}
-                        onChange={(e) => setTokenValue(e.target.value)}
-                        onClear={() => setTokenValue('')}
-                      />
-                    </form>
-                    <div className='text-center text-small text-default-600 dark:text-default-400 px-2'>
-                      💡 提示：请从 NapCat 启动日志中查看登录密钥
-                    </div>
-                    <Button
-                      className='mx-10 mt-10 text-lg py-7'
-                      color='primary'
-                      isLoading={isLoading}
-                      radius='full'
-                      size='lg'
-                      variant='shadow'
-                      onPress={onSubmitToken}
-                    >
-                      {!isLoading && (
-                        <Image
-                          alt='logo'
-                          classNames={{
-                            wrapper: '-ml-8',
-                          }}
-                          height='2em'
-                          src={logo}
-                        />
-                      )}
-                      登录
-                    </Button>
-                  </>
-                )}
-            </CardBody>
-          </HoverEffectCard>
-        </motion.div>
-      </PureLayout>
-    </>
-  );
+  return <>
+    <title>管理登录 · QQ Bot Console</title>
+    <PureLayout>
+      <div className='console-auth-grid'>
+        <section className='console-auth-story'>
+          <span className='console-eyebrow'>YOUR BOT, UNDER CONTROL</span>
+          <h1>让每一次连接，<br /><span>清晰可见。</span></h1>
+          <p>从 QQ 登录到 GSCore 消息桥接，在一个清晰、可靠的控制台中管理你的机器人。</p>
+          <div className='console-auth-features'>
+            <div className='console-auth-feature'><LuLayoutDashboard /><div><strong>一个工作空间</strong><p>连接、日志、插件与文件管理，保留熟悉的能力。</p></div></div>
+            <div className='console-auth-feature'><LuCable /><div><strong>连接状态不再靠猜</strong><p>QQ 与 GSCore 分开诊断，问题直达处理入口。</p></div></div>
+            <div className='console-auth-feature'><LuShieldCheck /><div><strong>凭据安全优先</strong><p>沿用服务端鉴权，支持 Passkey 与两步验证。</p></div></div>
+          </div>
+        </section>
+        <section className='console-auth-card' aria-labelledby='auth-heading'>
+          <span className='console-eyebrow'>SECURE ACCESS</span>
+          <h2 id='auth-heading'>{require2FA ? '两步验证' : '登录管理控制台'}</h2>
+          <p className='console-auth-card-subtitle'>{require2FA ? '请输入验证器应用中的动态验证码，完成本次管理登录。' : '使用启动日志中的 WebUI Token 登录。这不是你的 QQ 密码。'}</p>
+          <form className='flex flex-col gap-5' onSubmit={(event) => { event.preventDefault(); void submit(require2FA ? pendingToken : token, require2FA ? totp : undefined); }}>
+            <input className='sr-only' aria-label='管理账号' type='text' name='username' value='qq-bot-console' readOnly autoComplete='username' tabIndex={-1} />
+            {require2FA ? <Input autoFocus type='text' inputMode='numeric' pattern='[0-9]{6}' maxLength={6} autoComplete='one-time-code' label='动态验证码' labelPlacement='outside' placeholder='输入 6 位验证码' variant='bordered' size='lg' value={totp} onValueChange={(value) => setTotp(value.replace(/\D/g, ''))} isDisabled={loading} /> : <Input type='password' name='password' autoComplete='current-password' label='管理 Token' labelPlacement='outside' placeholder='输入你的 WebUI Token' variant='bordered' size='lg' value={token} onValueChange={setToken} isDisabled={loading} startContent={<LuKeyRound className='text-default-400' />} />}
+            {error && <p className='text-danger text-xs leading-relaxed break-words' role='alert'>{error}</p>}
+            <Button type='submit' size='lg' color='primary' isLoading={loading} endContent={!loading && <LuArrowRight />}>{require2FA ? '验证并进入控制台' : '进入控制台'}</Button>
+          </form>
+          {require2FA ? <Button variant='light' className='mt-5' size='sm' startContent={<LuArrowLeft />} isDisabled={loading} onPress={() => { setRequire2FA(false); setTotp(''); setPendingToken(''); setError(''); }}>返回 Token 登录</Button> : <>
+            <div className='flex items-center gap-3 my-6 text-[10px] text-default-400'><span className='h-px bg-divider flex-1' />其他登录方式<span className='h-px bg-divider flex-1' /></div>
+            <Button className='w-full' variant='bordered' size='lg' onPress={passkey} isDisabled={loading} isLoading={passkeyLoading} startContent={!passkeyLoading && <LuFingerprint size={19} />}>使用 Passkey</Button>
+            {passkeyLoading && <p className='mt-3 text-xs text-default-500' role='status'>等待设备验证，最多 30 秒。也可直接使用 Token。</p>}
+          </>}
+          <p className='mt-6 text-[11px] text-default-500 leading-relaxed'>请仅在可信设备上登录。管理凭据可以访问机器人配置和文件，切勿公开分享。</p>
+        </section>
+      </div>
+    </PureLayout>
+  </>;
 }

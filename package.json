@@ -1,8 +1,9 @@
 {
-  "name": "napcat",
+  "name": "qq-bot-console",
+  "packageManager": "pnpm@9.15.9",
   "private": true,
   "type": "module",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "scripts": {
     "build:shell": "pnpm --filter napcat-shell run build || exit 1",
     "build:shell:dev": "pnpm --filter napcat-shell run build:dev || exit 1",

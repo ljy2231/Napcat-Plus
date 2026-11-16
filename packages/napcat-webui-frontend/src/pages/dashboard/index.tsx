@@ -1,128 +1,63 @@
-import { Card, CardBody } from '@heroui/card';
-import { useLocalStorage } from '@uidotdev/usehooks';
-import { useRequest } from 'ahooks';
-import clsx from 'clsx';
-import { useCallback, useEffect, useRef } from 'react';
-import key from '@/const/key';
+import { Button } from '@heroui/button';
+import { LuActivity, LuArrowUpRight, LuBot, LuCable, LuClock3, LuFileText, LuFolderOpen, LuPackage, LuRefreshCw, LuServer, LuShieldCheck, LuTriangleAlert } from 'react-icons/lu';
+import { Link } from 'react-router-dom';
+import { ApiError, ConsoleLoading, ConsolePageHeader, ConsolePanel, StatusBadge } from '@/components/console-ui';
+import useConsoleStatus from '@/hooks/use-console-status';
+import { formatUptime, gscorePresentation, loginPresentation } from '@/utils/console';
 
-import toast from 'react-hot-toast';
+const shortcuts = [
+  { to: '/network', icon: LuCable, title: 'OneBot 连接', detail: 'HTTP、WebSocket 与事件上报' },
+  { to: '/plugins', icon: LuPackage, title: '插件管理', detail: '配置与维护已安装插件' },
+  { to: '/debug/ws', icon: LuActivity, title: '消息与调试', detail: '观察事件、聊天与接口测试' },
+  { to: '/file_manager', icon: LuFolderOpen, title: '文件管理', detail: '浏览文件与上传资源' },
+];
 
-import NetworkItemDisplay from '@/components/display_network_item';
-import Hitokoto from '@/components/hitokoto';
-import QQInfoCard from '@/components/qq_info_card';
-import SystemInfo from '@/components/system_info';
-import SystemStatusDisplay from '@/components/system_status_display';
-
-import useConfig from '@/hooks/use-config';
-
-import QQManager from '@/controllers/qq_manager';
-import WebUIManager from '@/controllers/webui_manager';
-
-const Networks: React.FC = () => {
-  const { config, refreshConfig } = useConfig();
-  const allNetWorkConfigLength =
-    config.network.httpClients.length +
-    config.network.websocketClients.length +
-    config.network.websocketServers.length +
-    config.network.httpServers.length;
-
-  useEffect(() => {
-    refreshConfig();
-  }, []);
-  return (
-    <div className='grid grid-cols-8 md:grid-cols-3 lg:grid-cols-6 gap-y-2 gap-x-1 md:gap-y-4 md:gap-x-4 py-5'>
-      <NetworkItemDisplay count={allNetWorkConfigLength} label='网络配置' />
-      <NetworkItemDisplay
-        count={config.network.httpServers.length}
-        label='HTTP服务器'
-        size='sm'
-      />
-      <NetworkItemDisplay
-        count={config.network.httpClients.length}
-        label='HTTP客户端'
-        size='sm'
-      />
-      <NetworkItemDisplay
-        count={config.network.websocketServers.length}
-        label='WS服务器'
-        size='sm'
-      />
-      <NetworkItemDisplay
-        count={config.network.websocketClients.length}
-        label='WS客户端'
-        size='sm'
-      />
+export default function DashboardIndexPage () {
+  const { data, loading, error, refresh } = useConsoleStatus();
+  // A cached response after a failed request is not proof of current availability.
+  const current = error ? undefined : data;
+  const login = loginPresentation(current?.login);
+  const gs = gscorePresentation(current?.gscore.state);
+  return <>
+    <title>总览仪表盘 · QQ Bot Console</title>
+    <ConsolePageHeader eyebrow='WORKSPACE OVERVIEW' title='总览仪表盘' description='连接状态、运行诊断与常用操作，在一个工作空间中掌握。' actions={<Button variant='bordered' size='sm' isLoading={loading} startContent={!loading && <LuRefreshCw size={15} />} onPress={refresh}>刷新状态</Button>} />
+    {error && <ApiError error={error} onRetry={refresh} />}
+    {loading && !data && <ConsoleLoading />}
+    <div className='console-stat-grid'>
+      <div className='console-stat'><div className='console-stat-heading'><span>QQ 账号状态</span><LuBot /></div><div className='console-stat-value'>{current ? login.label : '—'}</div><div className='console-stat-foot'><StatusBadge tone={current ? login.tone : 'neutral'}>{current?.login.coreReady ? '核心服务就绪' : current ? '等待核心就绪' : '状态待获取'}</StatusBadge></div></div>
+      <div className='console-stat'><div className='console-stat-heading'><span>GSCore 连接</span><LuCable /></div><div className='console-stat-value'>{current ? gs.label : '—'}</div><div className='console-stat-foot'>{current ? (current.gscore.enabled ? `本轮重试 ${current.gscore.reconnectAttempts} 次` : '在连接管理中配置并启用') : '等待真实连接状态'}</div></div>
+      <div className='console-stat'><div className='console-stat-heading'><span>本次运行时长</span><LuClock3 /></div><div className='console-stat-value'>{formatUptime(current?.uptime)}</div><div className='console-stat-foot'>服务端进程运行时间 · 每 5 秒更新</div></div>
+      <div className='console-stat'><div className='console-stat-heading'><span>当前版本</span><LuServer /></div><div className='console-stat-value'>{current?.version || '—'}</div><div className='console-stat-foot'>QQ Bot Console · NapCat 核心</div></div>
     </div>
-  );
-};
-
-const QQInfo: React.FC = () => {
-  const { data, loading, error } = useRequest(QQManager.getQQLoginInfo);
-  return <QQInfoCard data={data} error={error} loading={loading} />;
-};
-
-export interface SystemStatusCardProps {
-  setArchInfo: (arch: string | undefined) => void;
-}
-const SystemStatusCard: React.FC<SystemStatusCardProps> = ({ setArchInfo }) => {
-  const [systemStatus, setSystemStatus] = useLocalStorage<SystemStatus | undefined>('napcat_system_status_cache', undefined);
-  const isSetted = useRef(false);
-  const getStatus = useCallback(() => {
-    try {
-      const event = WebUIManager.getSystemStatus(setSystemStatus);
-      return event;
-    } catch (_error) {
-      toast.error('获取系统状态失败');
-    }
-  }, []);
-
-  useEffect(() => {
-    const close = getStatus();
-    return () => {
-      close?.close();
-    };
-  }, [getStatus]);
-
-  useEffect(() => {
-    if (systemStatus?.arch && !isSetted.current) {
-      setArchInfo(systemStatus.arch);
-      isSetted.current = true;
-    }
-  }, [systemStatus, setArchInfo]);
-
-  return <SystemStatusDisplay data={systemStatus} />;
-};
-
-const DashboardIndexPage: React.FC = () => {
-  const [archInfo, setArchInfo] = useLocalStorage<string | undefined>('napcat_arch_info_cache', undefined);
-  // @ts-ignore
-  const [backgroundImage] = useLocalStorage<string>(key.backgroundImage, '');
-  const hasBackground = !!backgroundImage;
-
-  return (
-    <>
-      <title>基础信息 - NapCat WebUI</title>
-      <section className='w-full p-2 md:p-4 md:max-w-[1000px] mx-auto overflow-hidden'>
-        <div className='grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch'>
-          <div className='flex flex-col gap-2'>
-            <QQInfo />
-            <SystemInfo archInfo={archInfo} />
+    <div className='console-content-grid'>
+      <div className='flex flex-col gap-5'>
+        <ConsolePanel title='连接中心' description='仅展示当前 API 返回的状态，不使用模拟数据。' actions={<span className='console-live-label'><LuActivity size={13} />实时检查</span>}>
+          <div className='console-service-row'>
+            <span className='console-service-icon'><LuBot size={21} /></span>
+            <div className='console-service-copy'><strong>QQ 登录服务</strong><p>{current ? login.detail : '尚未取得登录信息'}</p></div>
+            <Link to='/qq_login' aria-label='查看 QQ 登录状态'><LuArrowUpRight className='text-default-500' size={19} /></Link>
           </div>
-          <SystemStatusCard setArchInfo={setArchInfo} />
-        </div>
-        <Networks />
-        <Card className={clsx(
-          'backdrop-blur-sm border border-white/40 dark:border-white/10 shadow-sm transition-all overflow-hidden',
-          hasBackground ? 'bg-white/10 dark:bg-black/10' : 'bg-white/60 dark:bg-black/40'
-        )}
-        >
-          <CardBody className='overflow-hidden'>
-            <Hitokoto />
-          </CardBody>
-        </Card>
-      </section>
-    </>
-  );
-};
-
-export default DashboardIndexPage;
+          <div className='console-service-row'>
+            <span className='console-service-icon'><LuCable size={21} /></span>
+            <div className='console-service-copy'><strong>GSCore 消息桥接</strong><p>{current?.gscore.enabled ? (current.gscore.lastError || current.gscore.url || '未配置连接地址') : '启用后将 QQ 消息对接到 GSCore'}</p></div>
+            <StatusBadge tone={gs.tone}>{gs.label}</StatusBadge>
+          </div>
+          <div className='mt-4 flex flex-wrap gap-2'><Button as={Link} to='/gscore' size='sm' color='primary' endContent={<LuArrowUpRight />}>管理 GSCore</Button><Button as={Link} to='/qq_login' size='sm' variant='flat'>查看 QQ 登录</Button></div>
+        </ConsolePanel>
+        <ConsolePanel title='运行诊断' description='根据服务当前状态生成的诊断信息。' actions={<Link to='/logs' className='text-xs text-primary flex items-center gap-1'>查看日志<LuArrowUpRight /></Link>}>
+          {!current ? <div className='console-empty'>等待服务响应后展示诊断结果。</div> : current.diagnostics.length === 0 ? <div className='console-empty'><LuShieldCheck className='mx-auto mb-2 text-success' size={24} />服务未报告诊断项目。<br />具体连接状态以上方实时结果为准。</div> : <div className='console-diagnostics'>{current.diagnostics.map((diagnostic, index) => <div className='console-diagnostic' key={`${diagnostic.title}-${index}`}>
+            {diagnostic.level === 'info' ? <LuFileText className='text-primary shrink-0 mt-0.5' size={17} /> : <LuTriangleAlert className={`${diagnostic.level === 'error' ? 'text-danger' : 'text-warning'} shrink-0 mt-0.5`} size={17} />}
+            <div><strong>{diagnostic.title}</strong><p>{diagnostic.detail}</p></div>
+          </div>)}</div>}
+        </ConsolePanel>
+      </div>
+      <div className='flex flex-col gap-5'>
+        <ConsolePanel title='常用工作入口' description='原有功能全部保留，按任务快速直达。'><div className='console-quick-grid'>{shortcuts.map(({ to, icon: Icon, title, detail }) => <Link className='console-quick-link' key={to} to={to}><Icon size={19} /><strong>{title}</strong><p>{detail}</p></Link>)}</div></ConsolePanel>
+        <ConsolePanel title='安全与维护' description='控制台会话与 QQ 账号登录相互独立。'>
+          <div className='console-form-note'>退出管理登录不会让 QQ 下线。修改连接配置可能触发重新连接，请先确认地址和鉴权信息。设备、文件和终端操作仍通过原有功能提供。</div>
+          <div className='mt-4 flex gap-4'><Link className='text-xs text-primary' to='/config'>系统设置 →</Link><Link className='text-xs text-primary' to='/about'>版本信息 →</Link></div>
+        </ConsolePanel>
+      </div>
+    </div>
+  </>;
+}

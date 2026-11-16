@@ -16,10 +16,12 @@
     }
   },
   "dependencies": {
-    "file-type": "^21.0.0"
+    "file-type": "^21.0.0",
+    "ws": "8.18.3"
   },
   "devDependencies": {
-    "@types/node": "^22.0.1"
+    "@types/node": "^22.0.1",
+    "@types/ws": "8.18.1"
   },
   "engines": {
     "node": ">=18.0.0"

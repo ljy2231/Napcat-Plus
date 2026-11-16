@@ -2,6 +2,16 @@ import store from 'napcat-common/src/store';
 import { napCatVersion } from 'napcat-common/src/version';
 import { NapCatCoreWorkingEnv, type LoginRuntimeType, type QQLoginPhase } from '../types';
 
+export interface WebUiAutoLoginResult {
+  attempted: boolean;
+  success: boolean;
+  needsVerification?: boolean;
+}
+
+type WebUiAutoLoginCallback = () => Promise<WebUiAutoLoginResult | void>;
+let webUiAutoLoginCallback: WebUiAutoLoginCallback | undefined;
+let refreshingQRCode: Promise<string> | undefined;
+
 const LoginRuntime: LoginRuntimeType = {
   workingEnv: NapCatCoreWorkingEnv.Unknown,
   LoginCurrentTime: Date.now(),
@@ -26,7 +36,7 @@ const LoginRuntime: LoginRuntimeType = {
 
   },
   onRefreshQRCode: async () => {
-    // 默认空实现，由 shell 注册真实回调
+    throw new Error('QQ 登录服务尚未初始化完成，请稍后再试');
   },
   NapCatHelper: {
     onOB11ConfigChanged: async () => {
@@ -207,11 +217,18 @@ export const WebUiDataRuntime = {
     return LoginRuntime.QQDataPath;
   },
 
-  setWebUiConfigQuickFunction (func: LoginRuntimeType['WebUiConfigQuickFunction']): void {
-    LoginRuntime.WebUiConfigQuickFunction = func;
+  setWebUiConfigQuickFunction (func: WebUiAutoLoginCallback): void {
+    webUiAutoLoginCallback = func;
   },
-  runWebUiConfigQuickFunction: async function () {
-    await LoginRuntime.WebUiConfigQuickFunction();
+  clearWebUiConfigQuickFunction (): void {
+    webUiAutoLoginCallback = undefined;
+  },
+  runWebUiConfigQuickFunction: async function (): Promise<WebUiAutoLoginResult> {
+    if (!webUiAutoLoginCallback) return { attempted: false, success: false };
+    const result = await webUiAutoLoginCallback();
+    // Compatibility for integrations with the old void callback: native success
+    // still wins; otherwise shell may safely produce one deduplicated QR.
+    return result ?? { attempted: true, success: LoginRuntime.QQLoginStatus };
   },
 
   setOneBotContext (context: any): void {
@@ -246,24 +263,39 @@ export const WebUiDataRuntime = {
     return LoginRuntime.onRefreshQRCode;
   },
 
-  refreshQRCode: async function () {
-    const previousQRCodeUrl = LoginRuntime.QQQRCodeURL;
-    LoginRuntime.QQLoginError = '';
-    LoginRuntime.QQLoginPhase = 'generating_qrcode';
-    await LoginRuntime.onRefreshQRCode();
-
-    const refreshTimeout = 10_000;
-    const deadline = Date.now() + refreshTimeout;
-    while (Date.now() < deadline) {
-      const qrcodeUrl = LoginRuntime.QQQRCodeURL;
-      if (qrcodeUrl && qrcodeUrl !== previousQRCodeUrl) {
-        LoginRuntime.QQLoginPhase = 'waiting_qrcode';
-        return qrcodeUrl;
+  refreshQRCode: function (): Promise<string> {
+    if (refreshingQRCode) return refreshingQRCode;
+    // Share one native request across duplicate clicks/pollers. Acquire the
+    // single-flight promise before invoking a callback that can synchronously
+    // emit native login events.
+    refreshingQRCode = Promise.resolve().then(async () => {
+      const previousQRCodeUrl = LoginRuntime.QQQRCodeURL;
+      const previousPhase = LoginRuntime.QQLoginPhase;
+      try {
+        await LoginRuntime.onRefreshQRCode();
+        if (LoginRuntime.QQLoginStatus) throw new Error('QQ 已登录，无需刷新二维码');
+        LoginRuntime.QQLoginError = '';
+        LoginRuntime.QQLoginPhase = 'generating_qrcode';
+        const deadline = Date.now() + 10_000;
+        while (Date.now() < deadline) {
+          if (LoginRuntime.QQLoginStatus) throw new Error('QQ 已登录，无需刷新二维码');
+          const qrcodeUrl = LoginRuntime.QQQRCodeURL;
+          if (qrcodeUrl && qrcodeUrl !== previousQRCodeUrl) {
+            LoginRuntime.QQLoginPhase = 'waiting_qrcode';
+            return qrcodeUrl;
+          }
+          await new Promise(resolve => setTimeout(resolve, 50));
+        }
+        throw new Error('二维码刷新超时：QQ 登录服务未返回新的二维码');
+      } catch (error) {
+        // Success and explicit reconnect state take precedence over late errors.
+        if (!LoginRuntime.QQLoginStatus && LoginRuntime.QQLoginPhase !== 'reconnecting') {
+          LoginRuntime.QQLoginError = error instanceof Error ? error.message : String(error);
+          LoginRuntime.QQLoginPhase = previousPhase === 'reconnecting' ? previousPhase : previousQRCodeUrl ? 'waiting_qrcode' : 'offline';
+        }
+        throw error;
       }
-      await new Promise(resolve => setTimeout(resolve, 50));
-    }
-
-    LoginRuntime.QQLoginPhase = previousQRCodeUrl ? 'waiting_qrcode' : 'offline';
-    throw new Error('二维码刷新超时：QQ 登录服务未返回新的二维码');
+    }).finally(() => { refreshingQRCode = undefined; });
+    return refreshingQRCode;
   },
 };

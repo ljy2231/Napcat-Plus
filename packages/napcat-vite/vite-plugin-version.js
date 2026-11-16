@@ -131,6 +131,10 @@ export default function vitePluginNapcatVersion () {
       }
     }
 
+    // Console builds are reproducible and must not depend on the removed upstream tags.
+    const localPackage = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../package.json'), 'utf8'));
+    if (localPackage.name === 'qq-bot-console') return `4.18.42+console.${localPackage.version}`;
+
     const cached = readCache();
     if (cached) return cached;
     try {
