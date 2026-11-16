@@ -16,6 +16,7 @@ export interface PluginStoreItem {
   sourceName?: string;
   sourceUrl?: string;
   sha256?: string;
+  size?: number;
 }
 
 export interface PluginStoreList {

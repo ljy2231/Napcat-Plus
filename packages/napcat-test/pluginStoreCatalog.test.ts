@@ -34,10 +34,9 @@ describe('conservative plugin catalog', () => {
     const list = catalog.snapshot();
     expect(list.sourceStatus).toBe('bundled');
     expect(list.refreshing).toBe(true);
-    expect(list.remoteInstallEnabled).toBe(false);
-    expect(list.plugins.map(item => item.id)).toEqual(['console-gscore', 'console-cleaner', 'console-debug', 'napcat-plugin-ssqq']);
+    expect(list.remoteInstallEnabled).toBe(true);
+    expect(list.plugins.map(item => item.id)).toEqual(['console-gscore', 'console-cleaner', 'console-debug']);
     expect(list.plugins.slice(0, 3).every(item => item.availability === 'builtin' && item.downloadUrl === '')).toBe(true);
-    expect(list.plugins[3]).toMatchObject({ availability: 'external', version: '', downloadUrl: '' });
     await Promise.resolve();
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(fetcher.mock.calls[0]![0]).toBe(PLUGIN_CATALOG_SOURCE);
@@ -52,14 +51,24 @@ describe('conservative plugin catalog', () => {
     catalog.snapshot(); await catalog.whenIdle();
     const list = catalog.snapshot();
     expect(list.sourceStatus).toBe('online');
-    expect(list.plugins).toHaveLength(5);
+    expect(list.plugins).toHaveLength(4);
     expect(list.plugins[0]!.availability).toBe('builtin');
-    expect(list.plugins[4]).toMatchObject({ availability: 'unavailable', downloadUrl: '', sourceUrl: PLUGIN_CATALOG_SOURCE });
-    expect(list.plugins[4]).not.toHaveProperty('sha256');
-    expect(list.plugins[4]).not.toHaveProperty('builtinPath');
+    expect(list.plugins[3]).toMatchObject({ availability: 'unavailable', downloadUrl: '', sourceUrl: PLUGIN_CATALOG_SOURCE });
+    expect(list.plugins[3]).not.toHaveProperty('sha256');
+    expect(list.plugins[3]).not.toHaveProperty('builtinPath');
     list.plugins[0]!.name = 'tampered'; list.plugins[0]!.tags!.push('tampered');
     expect(catalog.snapshot().plugins[0]!.name).not.toBe('tampered');
     expect(catalog.snapshot().plugins[0]!.tags).not.toContain('tampered');
+  });
+
+  it('discovers SSQQ only from the configured cloud index', async () => {
+    expect(PLUGIN_CATALOG_SOURCE).toBe('https://raw.githubusercontent.com/ljy2231/napcat-plus-plugin-index/main/index.json');
+    const payload = remote();
+    payload.plugins = [{ ...remoteItem, id: 'napcat-plugin-ssqq', version: '3.5.2-3', downloadUrl: '' }];
+    const catalog = new PluginCatalog({ fetcher: vi.fn(async () => response(payload)) });
+    expect(catalog.snapshot().plugins.some(item => item.id === 'napcat-plugin-ssqq')).toBe(false);
+    await catalog.whenIdle();
+    expect(catalog.snapshot().plugins.find(item => item.id === 'napcat-plugin-ssqq')).toMatchObject({ version: '3.5.2-3', availability: 'unavailable', downloadUrl: '', sourceUrl: PLUGIN_CATALOG_SOURCE });
   });
 
   it('uses last-known-good cache as stale and never drops it on malformed refresh', async () => {
@@ -71,7 +80,7 @@ describe('conservative plugin catalog', () => {
     now += PLUGIN_CATALOG_FRESH_MS + 1;
     expect(catalog.snapshot()).toMatchObject({ sourceStatus: 'cached', refreshing: true });
     await catalog.whenIdle();
-    expect(catalog.snapshot()).toMatchObject({ sourceStatus: 'cached', lastSuccessAt: originalSuccess, remoteInstallEnabled: false });
+    expect(catalog.snapshot()).toMatchObject({ sourceStatus: 'cached', lastSuccessAt: originalSuccess, remoteInstallEnabled: true });
     expect(catalog.snapshot().plugins.some(item => item.id === remoteItem.id)).toBe(true);
   });
 
@@ -93,7 +102,7 @@ describe('conservative plugin catalog', () => {
     let signal: AbortSignal | null | undefined;
     const fetcher = vi.fn((_input: string | URL | Request, init?: RequestInit) => { signal = init?.signal; return new Promise<Response>(() => {}); });
     const catalog = new PluginCatalog({ fetcher, timeoutMs: 60000 });
-    expect(catalog.snapshot().plugins).toHaveLength(4);
+    expect(catalog.snapshot().plugins).toHaveLength(3);
     await vi.advanceTimersByTimeAsync(4000);
     await catalog.whenIdle();
     expect(signal?.aborted).toBe(true);
@@ -133,6 +142,13 @@ describe('untrusted remote index validation', () => {
     expect(() => validatePluginCatalog({ ...remote(), plugins: [{ ...remoteItem, name: {} }] })).toThrow();
     expect(() => validatePluginCatalog({ ...remote(), plugins: [{ ...remoteItem, sha256: 'fake' }] })).toThrow();
     expect(() => validatePluginCatalog({ ...remote(), plugins: [{ ...remoteItem, downloadUrl: 'http://localhost/secret' }] })).toThrow();
+  });
+  it('only enables the independently approved release tuple', () => {
+    const approved = { ...remoteItem, id: 'napcat-plugin-ssqq', version: '3.5.2-3', downloadUrl: 'https://github.com/Stapxs/Stapxs-QQ-Lite-2.0/releases/download/v3.5.2/napcat-plugin-ssqq.zip', sha256: '82b9ef50f7e4ddb92a07149d763f7ce98502d24ac73ce8039499b24b25df1c04', size: 6118730 };
+    expect(validatePluginCatalog({ ...remote(), plugins: [approved] }).plugins[0]).toMatchObject({ availability: 'installable', sha256: approved.sha256, size: approved.size });
+    for (const alteration of [{ sha256: 'b'.repeat(64) }, { size: approved.size + 1 }, { version: '3.5.2-4' }, { downloadUrl: remoteItem.downloadUrl }]) {
+      expect(validatePluginCatalog({ ...remote(), plugins: [{ ...approved, ...alteration }] }).plugins[0]).toMatchObject({ availability: 'unavailable', downloadUrl: '' });
+    }
   });
   it('strips HTML angle brackets and ignores all remote availability/install claims', () => {
     const list = validatePluginCatalog({ ...remote(), plugins: [{ ...remoteItem, description: '<script>evil</script>' }], sourceStatus: 'online', remoteInstallEnabled: true });

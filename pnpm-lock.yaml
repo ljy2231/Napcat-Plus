@@ -492,6 +492,9 @@ importers:
       ws:
         specifier: ^8.18.3
         version: 8.18.3
+      yauzl:
+        specifier: ^3.2.0
+        version: 3.4.0
     devDependencies:
       '@types/compression':
         specifier: ^1.8.1
@@ -508,6 +511,9 @@ importers:
       '@types/ws':
         specifier: ^8.5.12
         version: 8.18.1
+      '@types/yauzl':
+        specifier: ^2.10.3
+        version: 2.10.3
 
   packages/napcat-webui-frontend:
     dependencies:
@@ -3154,6 +3160,9 @@ packages:
 
   '@types/ws@8.18.1':
     resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
+
+  '@types/yauzl@2.10.3':
+    resolution: {integrity: sha512-oJoftv0LSuaDZE3Le4DbKX+KS9G36NzOeSap90UIK0yMA/NhKJhqlSGtNDORNRaIbQfzjXDrQa0ytJ6mNRGz/Q==}
 
   '@typescript-eslint/eslint-plugin@8.46.4':
     resolution: {integrity: sha512-R48VhmTJqplNyDxCyqqVkFSZIx1qX6PzwqgcXn1olLrzxcSBDlOsbtcnQuQhNtnNiJ4Xe5gREI1foajYaYU2Vg==}
@@ -7036,6 +7045,10 @@ packages:
     resolution: {integrity: sha512-y11nGElTIV+CT3Zv9t7VKl+Q3hTQoT9a1Qzezhhl6Rp21gJ/IVTW7Z3y9EWXhuUBC2Shnf+DX0antecpAwSP8w==}
     engines: {node: '>=10'}
 
+  yauzl@3.4.0:
+    resolution: {integrity: sha512-jIH9yLR9wqr0wOS0TpBvo/g/2UgZH5qePVbjgRliiF0BYvOZyaBknKsF+x9Iht0O6sqgnB93rCICdOZFecJuDw==}
+    engines: {node: '>=12'}
+
   yazl@2.5.1:
     resolution: {integrity: sha512-phENi2PLiHnHb6QBVot+dJnaAZ0xosj7p3fWl+znIjBDlnMI2PsZCJZ306BPTFOaHf5qdDEI8x5qFrSOBN5vrw==}
 
@@ -10004,6 +10017,10 @@ snapshots:
   '@types/use-sync-external-store@0.0.6': {}
 
   '@types/ws@8.18.1':
+    dependencies:
+      '@types/node': 22.19.1
+
+  '@types/yauzl@2.10.3':
     dependencies:
       '@types/node': 22.19.1
 
@@ -14645,6 +14662,10 @@ snapshots:
     optional: true
 
   yargs-parser@20.2.9: {}
+
+  yauzl@3.4.0:
+    dependencies:
+      pend: 1.2.0
 
   yazl@2.5.1:
     dependencies:

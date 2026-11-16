@@ -127,6 +127,19 @@ export default class PluginManager {
     );
   }
 
+  /**
+   * 从云端目录安装插件
+   * @param id 插件 ID
+   */
+  public static async installFromStore (id: string): Promise<{ pluginId: string; version: string; loaded: boolean; status: 'registered' | 'restart_required' | 'registration_failed'; }> {
+    const { data } = await serverRequest.post<ServerResponse<{ pluginId: string; version: string; loaded: boolean; status: 'registered' | 'restart_required' | 'registration_failed'; }>>(
+      '/Plugin/Store/Install',
+      { id },
+      { timeout: 300000 } // 5分钟超时
+    );
+    return data.data;
+  }
+
   // ==================== 插件配置 ====================
 
   /**

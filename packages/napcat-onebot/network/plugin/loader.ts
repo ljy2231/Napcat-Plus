@@ -127,6 +127,7 @@ export class PluginLoader {
    * 扫描单个目录插件
    */
   private scanDirectoryPlugin (dirname: string, statusConfig: PluginStatusConfig): PluginEntry | null {
+    if (dirname.startsWith('.napcat-install-')) return null;
     const pluginDir = path.join(this.pluginPath, dirname);
 
     try {
@@ -385,7 +386,7 @@ export class PluginLoader {
     const items = fs.readdirSync(this.pluginPath, { withFileTypes: true });
 
     for (const item of items) {
-      if (!item.isDirectory()) continue;
+      if (!item.isDirectory() || item.name.startsWith('.napcat-install-')) continue;
 
       const packageJsonPath = path.join(this.pluginPath, item.name, 'package.json');
       if (fs.existsSync(packageJsonPath)) {

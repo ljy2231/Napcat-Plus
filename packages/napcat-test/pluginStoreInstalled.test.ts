@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { PluginItem, PluginListResponse } from '../napcat-webui-frontend/src/types/plugin-manager';
 import type { PluginStoreItem } from '../napcat-webui-frontend/src/types/plugin-store';
-import { confirmedPlugins, installedStoreItems } from '../napcat-webui-frontend/src/utils/plugin-store';
+import { confirmedPlugins, installedStoreItems, pluginInstallStatus } from '../napcat-webui-frontend/src/utils/plugin-store';
 
 const local = (id: string): PluginItem => ({ id, name: id, version: '1.0', author: 'author', description: 'local', status: 'disabled' });
 const entry = (id: string): PluginStoreItem => ({ id, name: `catalog ${id}`, version: '2.0', author: 'catalog', description: 'remote', downloadUrl: '', availability: 'external' });
@@ -24,6 +24,12 @@ describe('installed plugin store entries', () => {
     expect(installedStoreItems(catalog, null)).toEqual([]);
     expect(confirmedPlugins(response([]))).toEqual([]);
     expect(installedStoreItems(catalog, confirmedPlugins(response([])))).toEqual([]);
+  });
+
+  it('distinguishes unknown, absent and installed without relying on a version', () => {
+    expect(pluginInstallStatus('x', null)).toBe('unknown');
+    expect(pluginInstallStatus('x', [])).toBe('not-installed');
+    expect(pluginInstallStatus('x', [{ ...local('x'), version: '' }])).toBe('installed');
   });
 
   it('shows confirmed local plugins even if the catalog is unavailable', () => {

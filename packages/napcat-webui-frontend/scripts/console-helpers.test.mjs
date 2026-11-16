@@ -27,7 +27,7 @@ test('built-in store navigation is an explicit internal allowlist', () => {
 });
 test('store never advertises installation for missing or unverified availability', () => {
   assert.equal(store.pluginAvailabilityLabel({}), '暂不可用');
-  assert.equal(store.pluginAvailabilityLabel({ availability: 'installable' }), '安装暂停');
+  assert.equal(store.pluginAvailabilityLabel({ availability: 'installable' }), '可安装');
 });
 
 test('cleanup input is limited to safe categories and bounded days', () => {

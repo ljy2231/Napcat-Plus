@@ -38,6 +38,8 @@ export class OB11PluginMangerAdapter extends IOB11NetworkAdapter<PluginConfig> i
   /** 插件注册表: ID -> 插件条目 */
   private plugins: Map<string, PluginEntry> = new Map();
 
+  private pendingPluginInstalls = new Set<string>();
+
   /** 插件路由注册表: ID -> 路由注册器 */
   private pluginRouters: Map<string, PluginRouterRegistryImpl> = new Map();
 
@@ -294,11 +296,13 @@ export class OB11PluginMangerAdapter extends IOB11NetworkAdapter<PluginConfig> i
    * 设置插件状态（启用/禁用）
    */
   public async setPluginStatus (pluginId: string, enable: boolean): Promise<void> {
+    if (this.pendingPluginInstalls.has(pluginId)) throw new Error(`Plugin ${pluginId} is being installed`);
+    const entry = this.plugins.get(pluginId);
+    if (!entry) throw new Error(`Plugin ${pluginId} not found`);
     const config = this.getPluginConfig();
     config[pluginId] = enable;
     this.savePluginConfig(config);
 
-    const entry = this.plugins.get(pluginId);
     if (entry) {
       entry.enable = enable;
 
@@ -417,6 +421,43 @@ export class OB11PluginMangerAdapter extends IOB11NetworkAdapter<PluginConfig> i
       this.logger.logError(`[PluginManager] Error reloading plugin ${pluginId}:`, error);
       return false;
     }
+  }
+
+  /** 在安装目录提交之前持久禁用，避免旧配置在重启后执行新代码。 */
+  public preparePluginInstall (pluginId: string): void {
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(pluginId) || this.plugins.has(pluginId)) {
+      throw new Error('Invalid or already registered plugin ID');
+    }
+    const config = this.getPluginConfig();
+    config[pluginId] = false;
+    // PluginLoader.savePluginStatusConfig 吞掉写入错误；安装必须确认写入成功。
+    fs.mkdirSync(path.dirname(this.configPath), { recursive: true });
+    fs.writeFileSync(this.configPath, JSON.stringify(config, null, 2), 'utf-8');
+    this.pendingPluginInstalls.add(pluginId);
+  }
+
+  public finishPluginInstall (pluginId: string): void {
+    this.pendingPluginInstalls.delete(pluginId);
+  }
+
+  /** 只扫描元数据并登记新目录，绝不导入插件代码。 */
+  public registerInstalledDirectory (dirname: string): boolean {
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(dirname) || dirname.startsWith('.napcat-install-')) return false;
+    const directory = path.join(this.pluginPath, dirname);
+    try {
+      const stat = fs.lstatSync(directory);
+      if (!stat.isDirectory() || stat.isSymbolicLink()) return false;
+    } catch {
+      return false;
+    }
+    if (Array.from(this.plugins.values()).some(entry => entry.fileId === dirname || path.resolve(entry.pluginPath) === path.resolve(directory))) return false;
+    const entry = this.loader.rescanPlugin(dirname);
+    if (!entry || entry.id !== dirname || !entry.entryPath || entry.runtime.status === 'error' || this.plugins.has(entry.id)) return false;
+    // 拒绝在未完成禁用持久化时登记，包括内置插件的默认启用状态。
+    if (this.getPluginConfig()[entry.id] !== false) return false;
+    entry.enable = false;
+    this.plugins.set(entry.id, entry);
+    return true;
   }
 
   /**

@@ -1,5 +1,11 @@
 import type { PluginItem, PluginListResponse } from '../types/plugin-manager';
-import type { PluginStoreItem } from '../types/plugin-store';
+import type { PluginStoreItem, PluginStoreList } from '../types/plugin-store';
+
+/** The API also includes bundled tools; only entries from its cloud source belong here. */
+export function cloudStoreItems (catalog?: PluginStoreList): PluginStoreItem[] {
+  if (!catalog?.sourceUrl) return [];
+  return catalog.plugins.filter(item => item.availability !== 'builtin' && item.sourceUrl === catalog.sourceUrl);
+}
 
 /** Only a successful response from an available manager confirms installation. */
 export function confirmedPlugins (response?: PluginListResponse): PluginItem[] | null {
@@ -24,6 +30,13 @@ export function installedStoreItems (catalog: PluginStoreItem[], installed: Plug
   });
 }
 
+export type InstallStatus = 'installed' | 'not-installed' | 'unknown';
+
+/** Never infer absence from an unavailable manager or a missing version. */
+export function pluginInstallStatus (id: string, installed: PluginItem[] | null): InstallStatus {
+  return installed === null ? 'unknown' : installed.some(plugin => plugin.id === id) ? 'installed' : 'not-installed';
+}
+
 export function safePluginHomepage (value?: string): string | undefined {
   if (!value) return undefined;
   try {
@@ -39,5 +52,5 @@ export function builtinPluginPath (plugin: PluginStoreItem): string | undefined 
 }
 
 export function pluginAvailabilityLabel (plugin: PluginStoreItem): string {
-  return ({ builtin: '项目内置', external: '外部项目', unavailable: '暂不可用', installable: '安装暂停', local: '本地插件' } as const)[plugin.availability || 'unavailable'];
+  return ({ builtin: '项目内置', external: '外部项目', unavailable: '暂不可用', installable: '可安装', local: '本地插件' } as const)[plugin.availability || 'unavailable'];
 }

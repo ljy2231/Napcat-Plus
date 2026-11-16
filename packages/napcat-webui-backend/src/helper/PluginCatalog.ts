@@ -1,7 +1,6 @@
 import type { PluginStoreItem, PluginStoreList } from '../types/PluginStore';
 
-export const PLUGIN_CATALOG_SOURCE = 'https://raw.githubusercontent.com/NapNeko/napcat-plugin-index/main/plugins.v4.json';
-export const REMOTE_INSTALL_DISABLED_MESSAGE = '在线安装暂已停用：上游索引及安装包完整性未完成核验，旧安装器也尚未完成安全审查。内置工具可直接打开；第三方插件请查看官方页面并自行核对许可与来源后手动安装。';
+export const PLUGIN_CATALOG_SOURCE = 'https://raw.githubusercontent.com/ljy2231/napcat-plus-plugin-index/main/index.json';
 export const PLUGIN_CATALOG_TIMEOUT_MS = 4000;
 export const PLUGIN_CATALOG_MAX_BYTES = 256 * 1024;
 export const PLUGIN_CATALOG_REFRESH_COOLDOWN_MS = 60000;
@@ -56,20 +55,6 @@ const BUNDLED_ITEMS: readonly PluginStoreItem[] = [
     sourceName: 'Napcat-Plus 随包目录',
     sourceUrl: PROJECT_SOURCE,
   },
-  {
-    id: 'napcat-plugin-ssqq',
-    name: 'Stapxs QQ Lite（SSQQ）',
-    version: '',
-    description: '第三方 QQ Web 客户端；仅提供作者官方项目入口，不捆绑客户端或声称可一键安装。',
-    author: 'Stapxs',
-    homepage: 'https://github.com/Stapxs/Stapxs-QQ-Lite-2.0',
-    downloadUrl: '',
-    tags: ['外部', '聊天'],
-    availability: 'external',
-    availabilityReason: '需自行检查官方版本、客户端及资源许可证；本项目未验证最新包，不提供在线安装。',
-    sourceName: 'Stapxs 官方项目（仅外部入口）',
-    sourceUrl: 'https://github.com/Stapxs/Stapxs-QQ-Lite-2.0',
-  },
 ];
 
 export function isValidPluginCatalogId (value: unknown): value is string {
@@ -90,6 +75,30 @@ function text (value: unknown, limit: number, optional = false): string {
   // Text is data, never HTML. Restrict metacharacters so legacy markdown/HTML UI
   // cannot accidentally execute a remote description if the renderer changes.
   return value.trim().replace(/[<>]/g, '');
+}
+
+export const MAX_PLUGIN_PACKAGE_BYTES = 64 * 1024 * 1024;
+
+// Audited out of band and pinned in the application, independently of the
+// mutable cloud index. Updating the index alone cannot authorize executable code.
+const APPROVED_RELEASES: ReadonlyArray<{ id: string; version: string; url: string; sha256: string; size: number }> = [{
+  id: 'napcat-plugin-ssqq',
+  version: '3.5.2-3',
+  url: 'https://github.com/Stapxs/Stapxs-QQ-Lite-2.0/releases/download/v3.5.2/napcat-plugin-ssqq.zip',
+  sha256: '82b9ef50f7e4ddb92a07149d763f7ce98502d24ac73ce8039499b24b25df1c04',
+  size: 6118730,
+}];
+
+/** Only an exact GitHub release asset URL; a separate approval list authorizes installs. */
+function githubReleaseAsset (value: unknown): string {
+  if (typeof value !== 'string' || value.length > 2048) throw new Error('Invalid download URL');
+  let url: URL;
+  try { url = new URL(value); } catch { throw new Error('Invalid download URL'); }
+  if (url.protocol !== 'https:' || url.hostname !== 'github.com' || url.port || url.username || url.password || url.search || url.hash || /%2f|%5c|%2e/i.test(url.pathname)) throw new Error('Disallowed download URL');
+  const parts = url.pathname.split('/').filter(Boolean);
+  if (parts.length !== 6 || parts[2] !== 'releases' || parts[3] !== 'download') throw new Error('Download URL must be a GitHub release asset');
+  if (!parts.every(part => /^[a-zA-Z0-9._@+~-]+$/.test(part))) throw new Error('Invalid download URL');
+  return url.toString();
 }
 
 /** Only explicit public HTTPS GitHub project/release links, never a fetch target. */
@@ -118,26 +127,37 @@ export function validatePluginCatalog (value: unknown): PluginStoreList {
     if (!isValidPluginCatalogId(id) || ids.has(id)) throw new Error('Invalid or duplicate plugin ID');
     ids.add(id);
     const homepage = githubLink(item['homepage'], true);
-    // Download URLs are checked for structure, then intentionally discarded.
-    // A remote advertised SHA256 is not an independent trust anchor.
-    githubLink(item['downloadUrl'], true);
+    // A cloud index is mutable. Installation is permitted only when every
+    // release field exactly matches the independently reviewed local allowlist.
+    const rawDownload = item['downloadUrl'];
+    const hasDownload = rawDownload !== undefined && rawDownload !== null && rawDownload !== '';
+    const downloadUrl = hasDownload ? githubReleaseAsset(rawDownload) : '';
     const tags = item['tags'];
     if (tags !== undefined && (!Array.isArray(tags) || tags.length > 12)) throw new Error('Invalid tags');
-    const sha256 = item['sha256'];
-    if (sha256 !== undefined && (typeof sha256 !== 'string' || !/^[a-fA-F0-9]{64}$/.test(sha256))) throw new Error('Invalid SHA256');
+    const rawSha256 = item['sha256'];
+    if (rawSha256 !== undefined && (typeof rawSha256 !== 'string' || !/^[a-fA-F0-9]{64}$/.test(rawSha256))) throw new Error('Invalid SHA256');
+    const sha256 = typeof rawSha256 === 'string' ? rawSha256.toLowerCase() : '';
+    const rawSize = item['size'];
+    if (rawSize !== undefined && (typeof rawSize !== 'number' || !Number.isSafeInteger(rawSize) || rawSize <= 0 || rawSize > MAX_PLUGIN_PACKAGE_BYTES)) throw new Error('Invalid package size');
+    const size = typeof rawSize === 'number' ? rawSize : 0;
+    const version = text(item['version'], 80, true);
+    const installable = APPROVED_RELEASES.some(approved => approved.id === id && approved.version === version && approved.url === downloadUrl && approved.sha256 === sha256 && approved.size === size);
     return {
       id,
       name: text(item['name'], 120),
-      version: text(item['version'], 80, true),
+      version,
       description: text(item['description'], 2000, true),
       author: text(item['author'], 160, true),
       ...(homepage ? { homepage } : {}),
-      downloadUrl: '',
+      downloadUrl: installable ? downloadUrl : '',
+      ...(installable ? { sha256, size } : {}),
       tags: Array.isArray(tags) ? tags.map(tag => text(tag, 40)) : [],
       ...(item['minVersion'] === undefined ? {} : { minVersion: text(item['minVersion'], 80) }),
-      availability: 'unavailable',
-      availabilityReason: '来自上游索引的目录信息；插件来源、版本和包摘要未独立核验，仅供浏览，在线安装已停用。',
-      sourceName: 'NapNeko 官方索引（第三方条目未独立核验）',
+      availability: installable ? 'installable' : 'unavailable',
+      availabilityReason: installable
+        ? '此版本与本程序批准的发布包信息一致；安装前会校验摘要，但这不构成安全审计或第三方许可确认。'
+        : '该版本未获本程序固定发布包清单批准，仅供浏览。',
+      sourceName: 'Napcat-Plus 云端索引（安装前校验固定摘要）',
       sourceUrl: PLUGIN_CATALOG_SOURCE,
     };
   });
@@ -208,14 +228,18 @@ export class PluginCatalog {
     if ((forceRefresh || stale) && canCheck && !this.inFlight) this.startRefresh();
     const status = this.lastGood ? (!stale && this.lastResultOk ? 'online' : 'cached') : 'bundled';
     const message = status === 'online'
-      ? '官方索引最近可达；第三方条目仍未独立核验。在线安装暂已停用。'
+      ? '云端索引最近可达；仅本程序批准的固定版本可以安装，其余仅供浏览。'
       : status === 'cached'
-        ? '上游暂不可用或目录已过期；显示最近验证过结构的缓存，仅供浏览，不允许安装。'
+        ? '云端索引暂不可用或目录已过期；显示最近验证过结构的缓存，仅供浏览，不允许安装。'
         : this.checked === undefined
-          ? '显示随 Napcat-Plus 提供的保守目录；正在后台检查官方索引，不影响浏览。在线安装暂已停用。'
-          : '官方插件索引暂不可用；已切换到随包目录，可打开内置工具或官方外部页面。在线安装暂已停用。';
+          ? '显示随 Napcat-Plus 提供的内置工具目录；正在后台检查云端索引，不影响浏览。'
+          : '云端索引暂不可用；已切换到随包目录，可打开内置工具或官方外部页面。';
     const bundledIds = new Set(BUNDLED_ITEMS.map(item => item.id));
-    const remote = this.lastGood?.plugins.filter(item => !bundledIds.has(item.id)) ?? [];
+    const remote = (this.lastGood?.plugins.filter(item => !bundledIds.has(item.id)) ?? []).map(item => status === 'online' ? item : {
+      ...item,
+      availability: 'unavailable' as const,
+      availabilityReason: '云端索引不可用或已过期，缓存仅供浏览，不能安装。',
+    });
     return {
       version: this.lastGood?.version ?? 'napcat-plus-bundled-v1',
       updateTime: this.lastGood?.updateTime ?? CATALOG_DATE,
@@ -226,7 +250,7 @@ export class PluginCatalog {
       checkedAt: this.checked === undefined ? null : new Date(this.checked).toISOString(),
       lastSuccessAt: this.lastSuccess === undefined ? null : new Date(this.lastSuccess).toISOString(),
       refreshing: !!this.inFlight,
-      remoteInstallEnabled: false,
+      remoteInstallEnabled: true,
     };
   }
 
