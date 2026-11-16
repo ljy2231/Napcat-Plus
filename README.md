@@ -81,6 +81,45 @@ docker compose --env-file deploy/.env -f deploy/compose.yaml up -d --build
 
 仅保存地址不代表连通：QQ 登录后看连接状态与诊断结果。GSCore 服务本身不由示例 Compose 自动安装，避免未经确认引入不固定的镜像或修改已有服务。
 
+## 升级
+
+**GUI 里没有可用的在线升级按钮。** 本镜像固定了定制构建（`NAPCAT_PLUS_PINNED=1`），会拒绝上游在线更新，避免覆盖登录修复、共享配置等改动；页面上的更新入口只会提示通过镜像升级。
+
+### 标准安装目录（用 install.sh 装的）
+
+```bash
+cd ~/napcat-plus
+docker compose pull
+docker compose up -d
+```
+
+或者直接再跑一次安装脚本（幂等，不会动数据和 Token）：
+
+```bash
+curl -fsSL https://hub.002230.xyz/https://raw.githubusercontent.com/ljy2231/Napcat-Plus/main/deploy/install-cn.sh | bash
+```
+
+### 手动 docker run 装的
+
+```bash
+docker rm -f napcat-plus   # 数据在宿主机目录里，不会丢
+# 然后用「快速开始」里的 docker run 命令重新启动即可
+```
+
+### 指定版本
+
+```bash
+NAPCAT_PLUS_IMAGE=ghcr.io/ljy2231/napcat-plus:v0.2.0-preview.3 \
+  bash -c "$(curl -fsSL https://raw.githubusercontent.com/ljy2231/Napcat-Plus/main/deploy/install.sh)"
+```
+
+### 升级前
+
+- 备份数据目录（`qq/`、`config/`、`plugins/`）以及 `config/onebot11.json`、`config/napcat.json`
+- 不要用 `docker compose down -v`
+- 升级只换镜像，账号数据、登录态、插件配置都在宿主机绑定目录里保留
+- 升级后浏览器可能仍持有旧资源，按一次 `Ctrl + F5`
+
 ## 来源与许可
 
 - 基线：[`ljy2231/NapCatQQ@72912f2`](https://github.com/ljy2231/NapCatQQ/commit/72912f293924f43463b5976b01fc094a8ae11481)，2026-11-10，`docs: ending`；保留此前 Git 历史。
