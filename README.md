@@ -88,10 +88,29 @@ pnpm run build:shell
 > 首次拉取前如仓库未设置包公开，会返回 401。包可见性需在 GitHub 网页的 Package settings 中改为 Public，或先用 `docker login ghcr.io`。
 
 
-一条命令拉取并启动，自动生成 WebUI Token、创建数据目录：
+**一条命令**拉取镜像并启动（自动生成 WebUI Token、建目录、等健康检查）：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ljy2231/Napcat-Plus/main/deploy/install.sh | bash
+```
+
+> 若 GHCR 包仍为私有，先登录一次再执行：
+>
+> ```bash
+> echo "<你的 GitHub Token>" | docker login ghcr.io -u ljy2231 --password-stdin
+> curl -fsSL https://raw.githubusercontent.com/ljy2231/Napcat-Plus/main/deploy/install.sh | bash
+> ```
+
+**不用脚本的纯 docker 一行**（适合临时试用，Token 会打印在日志里）：
+
+```bash
+docker run -d --name napcat-plus --restart unless-stopped -p 6099:6099 \
+  -e WEBUI_TOKEN=$(openssl rand -hex 24) \
+  -v "$HOME/napcat-plus/qq:/app/.config/QQ" \
+  -v "$HOME/napcat-plus/config:/app/napcat/config" \
+  -v "$HOME/napcat-plus/plugins:/app/napcat/plugins" \
+  ghcr.io/ljy2231/napcat-plus:latest
+docker logs -f napcat-plus   # 查看 WebUI 地址与 Token
 ```
 
 完成后终端会打印访问地址与 Token。默认安装到 `~/napcat-plus`，端口 `6099`。
