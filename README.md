@@ -21,6 +21,17 @@
 curl -fsSL https://raw.githubusercontent.com/ljy2231/Napcat-Plus/main/deploy/install.sh | bash
 ```
 
+### 国内加速
+
+镜像同时可通过国内镜像源拉取（该源代理上游 registry，路径与摘要一致）：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ljy2231/Napcat-Plus/main/deploy/install.sh \
+  | NAPCAT_PLUS_MIRROR=hub.002230.xyz:44300 bash
+```
+
+实测该源可拉取 `hub.002230.xyz:44300/ghcr.io/ljy2231/napcat-plus:v0.2.0` 与基础镜像，摘要与 GHCR 一致（`sha256:81576e2…` / `sha256:6c1b1a2…`）。镜像源不可用时去掉该变量即回退 GHCR。
+
 **不用脚本的纯 docker 一行**（适合临时试用，Token 会打印在日志里）：
 
 ```bash
@@ -44,6 +55,7 @@ docker logs -f napcat-plus   # 查看 WebUI 地址与 Token
 | `NAPCAT_PLUS_PORT` | `6099` | 宿主端口 |
 | `NAPCAT_PLUS_BIND` | `0.0.0.0` | 监听地址；反代后面可设 `127.0.0.1` |
 | `NAPCAT_PLUS_TOKEN` | 随机生成 | 复用已有 WebUI Token |
+| `NAPCAT_PLUS_MIRROR` | 空（直连 GHCR） | 镜像源前缀，如 `hub.002230.xyz:44300` |
 
 ```bash
 # 示例：换目录、端口与版本
