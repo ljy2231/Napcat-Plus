@@ -78,7 +78,15 @@ pnpm run build:shell
 
 ## 一键安装（预构建镜像）
 
-镜像发布在 **GitHub Container Registry**：`ghcr.io/ljy2231/napcat-plus`（Linux amd64）。
+镜像发布在 **GitHub Container Registry**（Linux amd64）：
+
+| 镜像 | 说明 |
+| --- | --- |
+| `ghcr.io/ljy2231/napcat-plus:latest` / `:v0.2.0` | 应用镜像，约 2.4 GB |
+| `ghcr.io/ljy2231/napcat-plus-base:qq-3.2.34-53644` | 固定 QQ 运行时；上游 `mlikiowa/napcat-docker` 已随 NapCat 删库消失，此镜像为缓存复刻，源码构建依赖它 |
+
+> 首次拉取前如仓库未设置包公开，会返回 401。包可见性需在 GitHub 网页的 Package settings 中改为 Public，或先用 `docker login ghcr.io`。
+
 
 一条命令拉取并启动，自动生成 WebUI Token、创建数据目录：
 

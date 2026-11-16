@@ -1,5 +1,7 @@
 # The pinned runtime supplies Linux QQ 3.2.34-53644 and native runtime libraries.
-ARG QQ_RUNTIME=mlikiowa/napcat-docker@sha256:696e9574a0f6fb2f86cbecba8a32048f2a5823117dc9b13c6c02637ad890fa8b
+# The upstream mlikiowa/napcat-docker image was removed with the NapCat source
+# shutdown, so the pinned runtime is republished under this repository's GHCR.
+ARG QQ_RUNTIME=ghcr.io/ljy2231/napcat-plus-base:qq-3.2.34-53644
 FROM node:24-bookworm-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54 AS build
 WORKDIR /src
 RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
