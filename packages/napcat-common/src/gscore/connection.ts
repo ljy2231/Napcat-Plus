@@ -28,7 +28,7 @@ export class GScoreConnection {
   constructor (
     private config: GScoreConfig,
     private readonly botId: string,
-    private readonly onMessage: (data: string) => void | Promise<void>,
+    private readonly onMessage: (data: string, isCurrent: () => boolean) => void | Promise<void>,
     private readonly createSocket: SocketFactory = (url) => new WebSocket(url, {
       handshakeTimeout: 10_000,
       maxPayload: 16 * 1024 * 1024,
@@ -83,6 +83,12 @@ export class GScoreConnection {
     previous?.terminate();
   }
 
+  captureLease (): () => boolean {
+    const socket = this.socket;
+    const generation = this.generation;
+    return () => this.started && generation === this.generation && socket !== null && this.socket === socket && socket.readyState === WebSocket.OPEN && this.state === 'connected';
+  }
+
   send (value: object): boolean {
     const socket = this.socket;
     if (!socket || socket.readyState !== WebSocket.OPEN || this.state !== 'connected') return false;
@@ -128,7 +134,8 @@ export class GScoreConnection {
     socket.on('pong', () => { if (current()) this.heartbeatAlive = true; });
     socket.on('message', (data: RawData) => {
       if (!current()) return;
-      Promise.resolve().then(() => { if (current()) return this.onMessage(data.toString()); }).catch(() => {
+      const lease = this.captureLease();
+      Promise.resolve().then(() => { if (lease()) return this.onMessage(data.toString(), lease); }).catch(() => {
         if (current()) this.lastError = 'GSCore 消息格式或处理失败，请检查兼容性';
       });
     });

@@ -46,8 +46,9 @@ export default function GSCorePage () {
     if (!draft) return;
     const error = validateGSCoreConfig(draft);
     if (error) { setFormError(error); return; }
-    const destructive = (config.data?.enabled && !draft.enabled) || clearToken || current?.connected;
-    if (destructive) dialog.confirm({ title: clearToken ? '确认清除 Token 并保存？' : '确认更新 GSCore 连接？', content: clearToken ? '将删除服务端已保存的 GSCore Token；若服务要求鉴权，清除后将无法连接。其他修改会一同保存。' : '此操作会应用新的连接设置，可能短暂中断消息桥接。QQ 登录不会受影响。', confirmText: '确认保存', onConfirm: save });
+    const enabling = !config.data?.enabled && draft.enabled;
+    const destructive = enabling || (config.data?.enabled && !draft.enabled) || clearToken || current?.connected;
+    if (destructive) dialog.confirm({ title: enabling ? '确认启用内置 GSCore？' : clearToken ? '确认清除 Token 并保存？' : '确认更新 GSCore 连接？', content: enabling ? '请先停用旧 GSCore 适配插件。启用后会把当前 QQ 的群聊/私聊消息发送到所配置的服务，并接受其回复；预览版还不等同于旧插件全部功能。请仅连接可信服务，不要在两台容器登录同一账号。' : clearToken ? '将删除服务端已保存的 GSCore Token；若服务要求鉴权，清除后将无法连接。其他修改会一同保存。' : '此操作会应用新的连接设置，可能短暂中断消息桥接。QQ 登录不会受影响。', confirmText: '确认保存', onConfirm: save });
     else void save();
   };
 
@@ -97,6 +98,14 @@ export default function GSCorePage () {
             <Button className='w-full mt-6' variant='flat' color='primary' startContent={!reconnecting && <LuRefreshCw />} isLoading={reconnecting} isDisabled={!current?.enabled || !!status.error || saving} onPress={reconnect}>重新连接</Button>
             {!current?.enabled && <p className='text-xs text-default-500 mt-3 leading-relaxed'>先保存并启用 GSCore，才能手动重新连接。</p>}
           </>}
+        </ConsolePanel>
+        <ConsolePanel title='与旧插件的兼容范围' description='6100 预览版用于验证，不自动迁移生产配置。'>
+          <ul className='text-xs text-default-600 leading-relaxed space-y-2 list-disc pl-4'>
+            <li>重点修复引用字段、私聊文件链接、link:// 媒体、base64、Markdown 文本与混合消息。</li>
+            <li>未承诺旧插件的全部群管理命令、事件通知、撤回回执、禁言或复杂转发行为。</li>
+            <li>连接成功不代表全部机器人指令已验证；正式6099仍使用原插件。</li>
+            <li>切换前必须先停用另一套桥接，避免重复收发。</li>
+          </ul>
         </ConsolePanel>
         <ConsolePanel title='部署提示' description='容器内 localhost 指向当前容器本身。'>
           <div className='console-form-note'>同一 Docker 网络内优先使用服务名，例如 <code>ws://gsuid_core:8765</code>。若 GSCore 共享其他容器的网络命名空间，请填写那个容器的服务名。请勿直接照搬其他机器的网桥 IP。</div>

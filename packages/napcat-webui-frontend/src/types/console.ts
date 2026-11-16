@@ -22,6 +22,7 @@ export interface GSCoreUpdate extends Omit<GSCoreConfig, 'tokenConfigured'> {
 export interface ConsoleStatus {
   product: 'Napcat-Plus';
   version: string;
+  preview?: boolean;
   /** Process uptime in seconds, not an invented historical availability metric. */
   uptime: number;
   login: ConsoleLogin;

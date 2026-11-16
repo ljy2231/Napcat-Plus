@@ -1,19 +1,34 @@
-// 插件商店相关类型定义
+// 插件商店相关类型定义。保留 plugins/downloadUrl 字段兼容已有客户端。
+export type PluginAvailability = 'installable' | 'builtin' | 'external' | 'unavailable';
+export type PluginStoreSourceStatus = 'online' | 'cached' | 'bundled';
 
 export interface PluginStoreItem {
-  id: string; // 插件唯一标识
-  name: string; // 插件名称
-  version: string; // 最新版本
-  description: string; // 插件描述
-  author: string; // 作者
-  homepage?: string; // 主页链接
-  downloadUrl: string; // 下载地址
-  tags?: string[]; // 标签
-  minVersion?: string; // 最低版本要求
+  id: string;
+  name: string;
+  version: string; // 空字符串表示未验证版本，不代表已取得最新版本
+  description: string;
+  author: string;
+  homepage?: string;
+  downloadUrl: string; // 没有已核验的安装包时为空，不得用 homepage 代替
+  tags?: string[];
+  minVersion?: string;
+  availability?: PluginAvailability;
+  availabilityReason?: string;
+  builtinPath?: string; // 本项目内部路径，不是远程资源
+  sourceName?: string;
+  sourceUrl?: string;
+  sha256?: string;
 }
 
 export interface PluginStoreList {
-  version: string; // 索引版本
-  updateTime: string; // 更新时间
-  plugins: PluginStoreItem[]; // 插件列表
+  version: string;
+  updateTime: string;
+  plugins: PluginStoreItem[];
+  sourceStatus?: PluginStoreSourceStatus;
+  sourceMessage?: string;
+  sourceUrl?: string;
+  checkedAt?: string | null;
+  lastSuccessAt?: string | null;
+  refreshing?: boolean;
+  remoteInstallEnabled?: boolean;
 }

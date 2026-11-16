@@ -5,7 +5,7 @@ import { sendError, sendSuccess } from '../utils/response';
 import { getGScoreRuntime } from '@/napcat-common/src/gscore/runtime';
 import { ConsoleCleaner } from '../helper/ConsoleCleaner';
 import { OB11PluginMangerAdapter } from '@/napcat-onebot/network/plugin-manger';
-const consoleVersion = '0.1.0';
+const consoleVersion = '0.2.0-preview.1';
 
 const router = Router();
 const runtime = () => {
@@ -32,7 +32,9 @@ router.get('/status', (_, res) => {
     if (gscore.lastError) diagnostics.push({ level: 'warning', title: 'GSCore 连接诊断', detail: gscore.lastError });
     if (gscore.enabled) diagnostics.push({ level: 'info', title: '避免重复桥接', detail: '已启用内置 GSCore；请停用旧的 GSCore 适配插件，避免重复收发。Docker 中请使用同网络服务名，不要把 localhost 当作其他容器。' });
     if (!diagnostics.length) diagnostics.push({ level: 'info', title: '核心运行正常', detail: '当前没有登录错误；GSCore 可在连接管理页面按需启用。' });
-    return sendSuccess(res, { product: 'Napcat-Plus', version: consoleVersion, uptime: Math.floor(process.uptime()), login, gscore, diagnostics });
+    const preview = process.env['NAPCAT_PLUS_PREVIEW'] === '1';
+    if (preview) diagnostics.unshift({ level: 'warning', title: '6100 独立预览实例', detail: '此实例不共享6099的QQ数据。请勿登录正在6099使用的同一账号，以免挤下线；内置GSCore与生产旧插件不能同时桥接同一账号。' });
+    return sendSuccess(res, { product: 'Napcat-Plus', version: consoleVersion, preview, uptime: Math.floor(process.uptime()), login, gscore, diagnostics });
   } catch { return sendError(res, '控制台状态尚未就绪'); }
 });
 

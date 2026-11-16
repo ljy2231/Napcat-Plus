@@ -29,19 +29,20 @@ export class GScoreRuntime {
     return this.getConfig();
   }
 
-  bind (selfId: string, onMessage: (data: string) => Promise<void>) {
+  bind (selfId: string, onMessage: (data: string, isCurrent: () => boolean) => Promise<void>) {
     this.connection?.stop();
     const binding = ++this.bindingGeneration;
     let pending = 0;
     let chain = Promise.resolve();
     // Preserve the established wire identity across the Napcat-Plus rename.
-    this.connection = new GScoreConnection(this.config, `qq-bot-console-${selfId}`, async (data) => {
+    this.connection = new GScoreConnection(this.config, `qq-bot-console-${selfId}`, async (data, socketLease) => {
       if (pending >= 100) throw new Error('GSCore 队列已满');
       pending++;
       const generation = this.messageGeneration;
+      const isCurrent = () => binding === this.bindingGeneration && generation === this.messageGeneration && this.config.enabled && socketLease();
       const task = chain.then(() => {
-        if (binding !== this.bindingGeneration || generation !== this.messageGeneration || !this.config.enabled) return;
-        return onMessage(data);
+        if (!isCurrent()) return;
+        return onMessage(data, isCurrent);
       });
       chain = task.catch(() => {});
       try { await task; } finally { pending--; }
@@ -67,6 +68,13 @@ export class GScoreRuntime {
       lastError: this.configurationError || (this.config.enabled ? '等待 QQ 登录后建立 GSCore 连接' : ''),
       tokenConfigured: !!this.config.token,
     };
+  }
+
+  captureLease (): () => boolean {
+    const binding = this.bindingGeneration;
+    const generation = this.messageGeneration;
+    const socketLease = this.connection?.captureLease() ?? (() => false);
+    return () => binding === this.bindingGeneration && generation === this.messageGeneration && this.config.enabled && socketLease();
   }
 
   send (message: object) { return this.connection?.send(message) ?? false; }

@@ -12,6 +12,23 @@ const toolsSource = await readFile(new URL('../src/utils/tools.ts', import.meta.
 const toolsOutput = ts.transpileModule(toolsSource, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText;
 const tools = await import(`data:text/javascript;base64,${Buffer.from(toolsOutput).toString('base64')}`);
 const config = { enabled: true, url: 'ws://gsuid_core:8765', tokenConfigured: true, reconnectIntervalMs: 5000, maxReconnectAttempts: 10 };
+const storeSource = await readFile(new URL('../src/utils/plugin-store.ts', import.meta.url), 'utf8');
+const storeOutput = ts.transpileModule(storeSource, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText;
+const store = await import(`data:text/javascript;base64,${Buffer.from(storeOutput).toString('base64')}`);
+
+test('store links only accept HTTPS and never embedded credentials', () => {
+  assert.equal(store.safePluginHomepage('https://github.com/example/repo'), 'https://github.com/example/repo');
+  for (const value of ['javascript:alert(1)', 'http://host', 'https://user:secret@host', '//host', 'invalid']) assert.equal(store.safePluginHomepage(value), undefined);
+});
+test('built-in store navigation is an explicit internal allowlist', () => {
+  assert.equal(store.builtinPluginPath({ availability: 'builtin', builtinPath: '/gscore' }), '/gscore');
+  for (const path of ['/terminal', '//evil.example', 'https://evil.example', '/gscore?token=secret']) assert.equal(store.builtinPluginPath({ availability: 'builtin', builtinPath: path }), undefined);
+  assert.equal(store.builtinPluginPath({ availability: 'external', builtinPath: '/tools' }), undefined);
+});
+test('store never advertises installation for missing or unverified availability', () => {
+  assert.equal(store.pluginAvailabilityLabel({}), '暂不可用');
+  assert.equal(store.pluginAvailabilityLabel({ availability: 'installable' }), '安装暂停');
+});
 
 test('cleanup input is limited to safe categories and bounded days', () => {
   assert.equal(tools.cleanupInputError(['logs', 'cache'], 7), undefined);

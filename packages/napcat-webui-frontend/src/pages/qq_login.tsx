@@ -347,7 +347,7 @@ export default function QQLoginPage () {
       <title>QQ 登录状态 · Napcat-Plus</title>
       <PureLayout>
         <div className='console-login-workspace'>
-          <ConsolePageHeader eyebrow='ACCOUNT CONNECTION' title='连接你的 QQ 账号' description='管理登录已完成。继续登录 QQ，或先返回控制台配置其他服务。' actions={<Button variant='bordered' size='sm' startContent={<LuArrowLeft />} onPress={() => navigate('/')}>返回控制台</Button>} />
+          <ConsolePageHeader eyebrow='ACCOUNT CONNECTION' title='连接你的 QQ 账号' description='管理登录已完成。可先返回控制台配置其他服务。测试实例请勿登录另一容器正在使用的同一 QQ，以免互相挤下线。' actions={<Button variant='bordered' size='sm' startContent={<LuArrowLeft />} onPress={() => navigate('/')}>返回控制台</Button>} />
           <div className='console-login-grid'>
             <ConsolePanel title='账号登录' description='推荐使用手机 QQ 扫码，登录过程由 QQ 服务处理。' actions={<Button isIconOnly size='sm' variant='light' aria-label='设备设置' onPress={() => dialog.confirm({ title: '打开设备高级设置', content: '设备 GUID 会影响 QQ 登录环境。仅在明确需要时修改；请勿为解决普通网络故障随意重置。', confirmText: '查看设置', onConfirm: () => setShowGUIDManager(true) })}><LuSettings size={19} /></Button>}>
               <div className='console-login-state' aria-live='polite'>
