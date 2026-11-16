@@ -6,31 +6,44 @@
 
 ## 快速开始
 
-镜像已发布到 GitHub Container Registry，无需构建。支持 Linux amd64。
+一行命令，复制粘贴就能跑（Linux amd64，需要已装 Docker）。
 
-| 镜像 | 说明 |
-| --- | --- |
-| `ghcr.io/ljy2231/napcat-plus:latest` / `:v0.2.0` | 应用镜像，约 2.4 GB |
-| `ghcr.io/ljy2231/napcat-plus-base:qq-3.2.34-53644` | 固定 QQ 运行时；上游 `mlikiowa/napcat-docker` 已随 NapCat 删库消失，此镜像为缓存复刻，源码构建依赖它 |
+**国内服务器（走加速源，推荐）：**
 
-> 两个包均已设为 Public，可直接匿名拉取；已验证 `docker pull` 与一键脚本在新目录下可用。
+```bash
+curl -fsSL https://raw.githubusercontent.com/ljy2231/Napcat-Plus/main/deploy/install-cn.sh | bash
+```
 
-**一条命令**拉取镜像并启动（自动生成 WebUI Token、建目录、等健康检查）：
+**海外 / 直连 GHCR：**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ljy2231/Napcat-Plus/main/deploy/install.sh | bash
 ```
 
-### 国内加速
+脚本会自动生成 WebUI Token、建好数据目录、拉镜像、启动容器并等健康检查，最后打印访问地址和 Token。默认装在 `~/napcat-plus`，端口 `6099`。重复执行不会覆盖已有数据或 Token。
 
-镜像同时可通过国内镜像源拉取（该源代理上游 registry，路径与摘要一致）：
+换端口 / 换目录 / 换版本：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ljy2231/Napcat-Plus/main/deploy/install.sh \
-  | NAPCAT_PLUS_MIRROR=hub.002230.xyz:44300 bash
+NAPCAT_PLUS_PORT=6100 NAPCAT_PLUS_DIR=/opt/napcat-plus \
+  bash -c "$(curl -fsSL https://raw.githubusercontent.com/ljy2231/Napcat-Plus/main/deploy/install.sh)"
 ```
 
-实测该源可拉取 `hub.002230.xyz:44300/ghcr.io/ljy2231/napcat-plus:v0.2.0` 与基础镜像，摘要与 GHCR 一致（`sha256:81576e2…` / `sha256:6c1b1a2…`）。镜像源不可用时去掉该变量即回退 GHCR。
+| 变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `NAPCAT_PLUS_PORT` | `6099` | 宿主端口 |
+| `NAPCAT_PLUS_DIR` | `$HOME/napcat-plus` | 安装目录 |
+| `NAPCAT_PLUS_BIND` | `0.0.0.0` | 监听地址，反代后面可设 `127.0.0.1` |
+| `NAPCAT_PLUS_IMAGE` | GHCR `latest` | 指定版本，如 `:v0.2.0-preview.3` |
+| `NAPCAT_PLUS_MIRROR` | 空 | 镜像源前缀，`install-cn.sh` 已内置 |
+
+镜像地址（已公开，可匿名拉取）：
+
+| 镜像 | 说明 |
+| --- | --- |
+| `ghcr.io/ljy2231/napcat-plus:latest` / `:v0.2.0-preview.3` | 应用镜像，约 2.4 GB |
+| `hub.002230.xyz:44300/ghcr.io/ljy2231/napcat-plus:latest` | 同一镜像的国内加速路径，摘要一致 |
+| `ghcr.io/ljy2231/napcat-plus-base:qq-3.2.34-53644` | 固定 QQ 运行时；上游 `mlikiowa/napcat-docker` 已随删库消失，此镜像为复刻 |
 
 **不用脚本的纯 docker 一行**（适合临时试用，Token 会打印在日志里）：
 
@@ -43,43 +56,6 @@ docker run -d --name napcat-plus --restart unless-stopped -p 6099:6099 \
   ghcr.io/ljy2231/napcat-plus:latest
 docker logs -f napcat-plus   # 查看 WebUI 地址与 Token
 ```
-
-完成后终端会打印访问地址与 Token。默认安装到 `~/napcat-plus`，端口 `6099`。
-
-可覆盖的变量：
-
-| 变量 | 默认值 | 说明 |
-| --- | --- | --- |
-| `NAPCAT_PLUS_IMAGE` | `ghcr.io/ljy2231/napcat-plus:latest` | 指定版本，如 `:v0.2.0` |
-| `NAPCAT_PLUS_DIR` | `$HOME/napcat-plus` | 安装目录 |
-| `NAPCAT_PLUS_PORT` | `6099` | 宿主端口 |
-| `NAPCAT_PLUS_BIND` | `0.0.0.0` | 监听地址；反代后面可设 `127.0.0.1` |
-| `NAPCAT_PLUS_TOKEN` | 随机生成 | 复用已有 WebUI Token |
-| `NAPCAT_PLUS_MIRROR` | 空（直连 GHCR） | 镜像源前缀，如 `hub.002230.xyz:44300` |
-
-```bash
-# 示例：换目录、端口与版本
-NAPCAT_PLUS_DIR=/opt/napcat-plus NAPCAT_PLUS_PORT=6100 \
-NAPCAT_PLUS_IMAGE=ghcr.io/ljy2231/napcat-plus:v0.2.0 \
-  bash -c "$(curl -fsSL https://raw.githubusercontent.com/ljy2231/Napcat-Plus/main/deploy/install.sh)"
-```
-
-> 脚本是幂等的：重复执行会复用已有 `.env` 与数据目录，不会重置 Token 或覆盖账号数据。**内网/公网部署请先确认 Token 强度与访问控制**；管理端不要无保护暴露在公网。
-
-### 手动 docker run
-
-```bash
-docker run -d --name napcat-plus \
-  -p 6099:6099 \
-  -e WEBUI_TOKEN="$(openssl rand -hex 24)" \
-  -v "$PWD/napcat-plus/qq:/app/.config/QQ" \
-  -v "$PWD/napcat-plus/config:/app/napcat/config" \
-  -v "$PWD/napcat-plus/plugins:/app/napcat/plugins" \
-  --restart unless-stopped \
-  ghcr.io/ljy2231/napcat-plus:latest
-```
-
-启动后 `docker logs napcat-plus` 会打印 WebUI 地址与 Token。
 
 ### 从源码构建（自定义/离线）
 
