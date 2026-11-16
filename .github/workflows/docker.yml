@@ -8,15 +8,22 @@ on:
       publish:
         description: Publish to this repository's GHCR package
         type: boolean
-        default: false
+        default: true
+      version:
+        description: Console version embedded in the image
+        type: string
+        default: 0.2.0
 
 permissions:
   contents: read
 
+env:
+  IMAGE_NAME: ghcr.io/${{ github.repository }}
+
 jobs:
   docker:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 90
     permissions:
       contents: read
       packages: write
@@ -24,20 +31,40 @@ jobs:
       - uses: actions/checkout@v5
         with:
           persist-credentials: false
+
+      - name: Resolve version
+        id: version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          else
+            VERSION="${{ inputs.version }}"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Building console version: ${VERSION}"
+
       - uses: docker/setup-buildx-action@v3
+
       - uses: docker/login-action@v3
         if: startsWith(github.ref, 'refs/tags/') || inputs.publish
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
       - uses: docker/metadata-action@v5
         id: meta
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: ${{ env.IMAGE_NAME }}
           tags: |
             type=ref,event=tag
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/') }}
             type=sha
+          labels: |
+            org.opencontainers.image.title=Napcat-Plus
+            org.opencontainers.image.description=NapCat-based QQ bot console with reliable login, built-in GSCore bridge and diagnostics
+            org.opencontainers.image.licenses=LicenseRef-NapCat
+
       - uses: docker/build-push-action@v6
         with:
           context: .
@@ -46,5 +73,36 @@ jobs:
           push: ${{ startsWith(github.ref, 'refs/tags/') || inputs.publish }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            CONSOLE_VERSION=${{ steps.version.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Verify image starts and generates a QR code
+        if: startsWith(github.ref, 'refs/tags/') || inputs.publish
+        run: |
+          set -euo pipefail
+          TAG=$(echo "${{ steps.meta.outputs.tags }}" | head -n1)
+          docker pull "$TAG"
+          docker run -d --name verify -e WEBUI_TOKEN=verify-token-not-for-use -p 16099:6099 "$TAG"
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:16099/webui/ >/dev/null 2>&1; then
+              echo "WebUI responded after ${i}s"
+              break
+            fi
+            sleep 2
+          done
+          docker logs verify 2>&1 | grep -q "Core Version" || { docker logs verify; exit 1; }
+          curl -fsS http://127.0.0.1:16099/webui/ >/dev/null || { docker logs verify; exit 1; }
+          docker rm -f verify
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Napcat-Plus image"
+            echo ""
+            echo '```'
+            echo "${{ steps.meta.outputs.tags }}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

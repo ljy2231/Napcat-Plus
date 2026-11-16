@@ -76,27 +76,69 @@ pnpm run build:shell
 
 依赖安装默认不执行生命周期脚本；原生 QQ 测试需要相应运行环境，不能由纯单元测试替代。
 
-## Docker 快速开始
+## 一键安装（预构建镜像）
 
-当前镜像构建目标为 **Linux amd64**。运行时基础为 QQ `3.2.34-53644`，不在安装时自动拉取新版 QQ。
+镜像发布在 **GitHub Container Registry**：`ghcr.io/ljy2231/napcat-plus`（Linux amd64）。
+
+一条命令拉取并启动，自动生成 WebUI Token、创建数据目录：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ljy2231/Napcat-Plus/main/deploy/install.sh | bash
+```
+
+完成后终端会打印访问地址与 Token。默认安装到 `~/napcat-plus`，端口 `6099`。
+
+可覆盖的变量：
+
+| 变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `NAPCAT_PLUS_IMAGE` | `ghcr.io/ljy2231/napcat-plus:latest` | 指定版本，如 `:v0.2.0` |
+| `NAPCAT_PLUS_DIR` | `$HOME/napcat-plus` | 安装目录 |
+| `NAPCAT_PLUS_PORT` | `6099` | 宿主端口 |
+| `NAPCAT_PLUS_BIND` | `0.0.0.0` | 监听地址；反代后面可设 `127.0.0.1` |
+| `NAPCAT_PLUS_TOKEN` | 随机生成 | 复用已有 WebUI Token |
+
+```bash
+# 示例：换目录、端口与版本
+NAPCAT_PLUS_DIR=/opt/napcat-plus NAPCAT_PLUS_PORT=6100 \
+NAPCAT_PLUS_IMAGE=ghcr.io/ljy2231/napcat-plus:v0.2.0 \
+  bash -c "$(curl -fsSL https://raw.githubusercontent.com/ljy2231/Napcat-Plus/main/deploy/install.sh)"
+```
+
+> 脚本是幂等的：重复执行会复用已有 `.env` 与数据目录，不会重置 Token 或覆盖账号数据。**内网/公网部署请先确认 Token 强度与访问控制**；管理端不要无保护暴露在公网。
+
+### 手动 docker run
+
+```bash
+docker run -d --name napcat-plus \
+  -p 6099:6099 \
+  -e WEBUI_TOKEN="$(openssl rand -hex 24)" \
+  -v "$PWD/napcat-plus/qq:/app/.config/QQ" \
+  -v "$PWD/napcat-plus/config:/app/napcat/config" \
+  -v "$PWD/napcat-plus/plugins:/app/napcat/plugins" \
+  --restart unless-stopped \
+  ghcr.io/ljy2231/napcat-plus:latest
+```
+
+启动后 `docker logs napcat-plus` 会打印 WebUI 地址与 Token。
+
+### 从源码构建（自定义/离线）
 
 ```bash
 cp deploy/.env.example deploy/.env
 # 编辑 deploy/.env，将 WEBUI_TOKEN 改为随机强密码
-# 可生成：openssl rand -hex 24
-
 docker compose --env-file deploy/.env -f deploy/compose.yaml up -d --build
 ```
 
-默认仅监听 `127.0.0.1:6099`，打开 `http://127.0.0.1:6099/webui/`。远程使用 SSH 隧道或受保护的 HTTPS 反向代理，不建议裸露管理端口。容器保留原入口与挂载路径：
+数据挂载路径：
 
-| 持久化卷 | 容器位置 |
+| 目录 | 容器位置 |
 | --- | --- |
-| `qq-data` | `/app/.config/QQ` |
-| `console-config` | `/app/napcat/config` |
-| `console-plugins` | `/app/napcat/plugins` |
+| `qq/` | `/app/.config/QQ` |
+| `config/` | `/app/napcat/config` |
+| `plugins/` | `/app/napcat/plugins` |
 
-**不要执行 `docker compose down -v`，否则会删除持久化卷。**
+**不要执行 `docker compose down -v`；账号数据保存在宿主机的绑定目录中。**
 
 ### 连接 GSCore
 
