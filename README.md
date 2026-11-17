@@ -222,7 +222,6 @@ pnpm run build:shell
 - 测试结果、已知限制与变更范围见 [改造说明](<docs/console-changes.md>)。
 - GSCore 兼容修复与插件目录改造的来源、验证方法见 [0.2 预览说明](<docs/preview-6100.md>)。
 
-
 ---
 
 > [!WARNING]
