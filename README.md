@@ -8,7 +8,7 @@
 
 一行命令，复制粘贴就能跑（Linux amd64，需要已装 Docker）。
 
-**国内服务器（加速站已写进命令，全程不访问 GitHub）：**
+**国内加速下载(已内置加速站)：**
 
 ```bash
 curl -fsSL https://hub.002230.xyz:44300/https://raw.githubusercontent.com/ljy2231/Napcat-Plus/main/deploy/install-cn.sh | bash
