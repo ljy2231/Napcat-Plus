@@ -37,7 +37,7 @@ NAPCAT_PLUS_PORT=6100 NAPCAT_PLUS_DIR=/opt/napcat-plus \
 | `NAPCAT_PLUS_IMAGE` | GHCR `latest` | 指定版本，如 `:v0.2.0-preview.3` |
 | `NAPCAT_PLUS_MIRROR` | 空 | 镜像源前缀；`install-cn.sh` 已内置 `hub.002230.xyz:44300` |
 
-镜像地址（已公开，可匿名拉取）：
+镜像地址：
 
 | 镜像 | 说明 |
 | --- | --- |
@@ -73,7 +73,6 @@ docker compose --env-file deploy/.env -f deploy/compose.yaml up -d --build
 | `config/` | `/app/napcat/config` |
 | `plugins/` | `/app/napcat/plugins` |
 
-**不要执行 `docker compose down -v`；账号数据保存在宿主机的绑定目录中。**
 
 ### 连接 GSCore
 
