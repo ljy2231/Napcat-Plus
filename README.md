@@ -23,7 +23,6 @@ curl -fsSL https://raw.githubusercontent.com/ljy2231/Napcat-Plus/main/deploy/ins
 脚本会自动生成 WebUI Token、建好数据目录、拉镜像并启动容器，最后打印访问地址和 Token。默认安装目录为 `/opt/napcat-plus`，端口为 `6099`。重复执行保留已有数据和 Token，但会重新生成 Compose 文件，手工修改的 Compose 配置会被覆盖。
 
 
-
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
 | `NAPCAT_PLUS_PORT` | `6099` | 宿主端口 |
@@ -75,13 +74,9 @@ docker compose --env-file deploy/.env -f deploy/compose.yaml up -d --build
 
 ### 连接 GSCore
 
-将 GSCore 和 Napcat-Plus 加入同一个 Docker 网络，在控制台填写 `ws://<GSCore服务名>:8765`。如果 GSCore 使用 `network_mode: service:...` 或共享代理容器网络，应填那个网络容器的服务名。`localhost` 指当前 Napcat-Plus 容器，不是宿主机或另一个容器。无需为容器间通信开放公网端口。
-
+将 GSCore 和 Napcat-Plus 加入同一个 Docker 网络，在控制台填写 `ws://<GSCore服务名>:8765`。
 仅保存地址不代表连通：QQ 登录后看连接状态与诊断结果。GSCore 服务本身不由示例 Compose 自动安装，避免未经确认引入不固定的镜像或修改已有服务。
 
-## 升级
-
-**GUI 里没有可用的在线升级按钮。** 本镜像固定了定制构建（`NAPCAT_PLUS_PINNED=1`），会拒绝上游在线更新，避免覆盖登录修复、共享配置等改动；页面上的更新入口只会提示通过镜像升级。
 
 ### 标准安装目录（用 install.sh 装的）
 
