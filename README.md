@@ -198,7 +198,7 @@ pnpm run build:shell
 - GHCR 只使用该仓库 `GITHUB_TOKEN`，不需要把个人 Token 写入代码或工作流。
 - 本地构建可覆盖 `QQ_RUNTIME` 参数，但必须重新验证对应 QQ 版本兼容性。
 
-## 从旧名称升级
+## 当前项目
 
 项目现名为 **Napcat-Plus**，仓库地址为 [ljy2231/Napcat-Plus](https://github.com/ljy2231/Napcat-Plus)。npm/Docker 标识使用小写 `napcat-plus`。
 
