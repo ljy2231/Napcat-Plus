@@ -23,6 +23,7 @@ curl -fsSL https://raw.githubusercontent.com/ljy2231/Napcat-Plus/main/deploy/ins
 脚本会自动生成 WebUI Token、建好数据目录、拉镜像并启动容器，最后打印访问地址和 Token。默认安装目录为 `/opt/napcat-plus`，端口为 `6099`。重复执行保留已有数据和 Token，但会重新生成 Compose 文件，手工修改的 Compose 配置会被覆盖。
 
 
+
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
 | `NAPCAT_PLUS_PORT` | `6099` | 宿主端口 |
