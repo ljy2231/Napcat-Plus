@@ -17,9 +17,24 @@ u = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(u)
 OLD = 'sha256:' + '1' * 64
 NEW = 'sha256:' + '2' * 64
-IMG = 'registry.example/app@sha256:' + 'a' * 64
+IMG = 'ghcr.io/ljy2231/napcat-plus@sha256:' + 'a' * 64
 BASE = 'registry.example/app@sha256:' + 'b' * 64
 CID = 'c' * 64
+
+
+def setUpModule():
+    # Ensure these tests cannot contact a real network or start host Docker even
+    # if a future test forgets to mock the updater's command/discovery functions.
+    global network_guard, process_guard
+    network_guard = mock.patch.object(socket, 'create_connection', side_effect=AssertionError('network disabled'))
+    process_guard = mock.patch.object(subprocess, 'run', side_effect=AssertionError('subprocess disabled'))
+    network_guard.start()
+    process_guard.start()
+
+
+def tearDownModule():
+    process_guard.stop()
+    network_guard.stop()
 
 
 class UpdateTests(unittest.TestCase):
@@ -28,7 +43,7 @@ class UpdateTests(unittest.TestCase):
         self.state = Path(self.tmp.name)
         self.oldstate = u.STATE
         u.STATE = self.state
-        u.atomic_json(self.state / 'committed.json', {'generation': 1, 'image': BASE})
+        u.atomic_json(self.state / 'committed.json', {'generation': 1, 'image': BASE, 'policy_image': BASE, 'version': '1.0.0'})
         self.compose_path = self.state / 'compose.json'
         self.compose_path.write_text(json.dumps({'services': {'web': {'image': BASE}}}))
         self.p = {'generation': 2, 'image': IMG, 'project': 'app', 'service': 'web', 'compose_file': str(self.compose_path)}
@@ -55,7 +70,7 @@ class UpdateTests(unittest.TestCase):
                 target = override['services']['web']['image']
                 if target == IMG and self.bad_up:
                     raise RuntimeError('simulated failure')
-                if target == BASE and self.roll_back_fails:
+                if target in (BASE, 'napcat-updater-backup-app-web:previous') and self.roll_back_fails:
                     raise RuntimeError('simulated rollback failure')
                 self.image = NEW if target == IMG else OLD
                 return ''
@@ -65,11 +80,15 @@ class UpdateTests(unittest.TestCase):
             health = self.health.pop(0) if self.health else 'healthy'
             return json.dumps({'Image': self.image, 'State': {'Running': True, 'Health': {'Status': health}}})
         if args[:2] == ['image', 'inspect']:
+            if args[3] == '{{json .RepoDigests}}':
+                return json.dumps([IMG])
+            if args[3] == '{{json .Config.Env}}':
+                return json.dumps(['NAPCAT_PLUS_VERSION=1.0.1'])
             return OLD if args[-1] == BASE else NEW
         return ''
 
     def perform(self):
-        with mock.patch.object(u, 'load_policy', return_value=self.p), mock.patch.object(u, 'run', side_effect=self.run_command), mock.patch.object(u, 'COMPOSE_FILE', self.compose_path), mock.patch.object(u, 'trusted_path'), mock.patch.object(u.time, 'sleep'):
+        with mock.patch.object(u, 'load_policy', return_value=self.p), mock.patch.object(u, 'latest_version', return_value='1.0.1'), mock.patch.object(u, '_official_digest', return_value=IMG), mock.patch.object(u, 'run', side_effect=self.run_command), mock.patch.object(u, 'COMPOSE_FILE', self.compose_path), mock.patch.object(u, 'trusted_path'), mock.patch.object(u.time, 'sleep'):
             u.perform()
 
     def test_pull_precedes_up_and_health_waits(self):
@@ -122,6 +141,51 @@ class UpdateTests(unittest.TestCase):
         self.perform()
         self.assertFalse(self.calls)
         self.assertEqual(json.loads((self.state / 'status.json').read_text())['phase'], 'blocked')
+
+    def test_legacy_baseline_requires_administrator_migration(self):
+        legacy = {'generation': 1, 'image': BASE}
+        u.atomic_json(self.state / 'committed.json', legacy)
+        self.perform()
+        status = json.loads((self.state / 'status.json').read_text())
+        self.assertEqual(status['phase'], 'blocked')
+        self.assertIn('administrator migration', status['message'])
+        self.assertEqual(json.loads((self.state / 'committed.json').read_text()), legacy)
+        self.assertFalse(self.calls)
+
+    def test_discovery_failures_are_retryable_and_leave_baseline(self):
+        for name in ('latest_version', 'resolve_digest'):
+            with self.subTest(name=name):
+                with mock.patch.object(u, 'load_policy', return_value=self.p), mock.patch.object(u, 'latest_version', return_value='1.0.1'), mock.patch.object(u, 'run', side_effect=self.run_command), mock.patch.object(u, name, side_effect=OSError('network error')):
+                    u.perform()
+                self.assertEqual(json.loads((self.state / 'status.json').read_text())['phase'], 'failed')
+                self.assertFalse((self.state / 'pending.json').exists())
+                self.assertEqual(json.loads((self.state / 'committed.json').read_text())['version'], '1.0.0')
+                (self.state / 'last-attempt.json').unlink()
+
+    def test_changed_preview_version_does_not_pull(self):
+        with mock.patch.object(u, 'load_policy', return_value=self.p), mock.patch.object(u, 'latest_version', return_value='1.0.2'), mock.patch.object(u, 'run') as run:
+            u.perform('mirror', '1.0.1', 'sha256:' + 'a' * 64)
+        run.assert_not_called()
+        self.assertEqual(json.loads((self.state / 'status.json').read_text())['phase'], 'failed')
+
+    def test_no_downgrade_or_equal_version(self):
+        for candidate in ('0.99.999', '1.0.0'):
+            with self.subTest(candidate=candidate):
+                with mock.patch.object(u, 'load_policy', return_value=self.p), mock.patch.object(u, 'latest_version', return_value=candidate), mock.patch.object(u, '_official_digest', return_value='ghcr.io/ljy2231/napcat-plus@sha256:' + 'b' * 64), mock.patch.object(u, 'run') as run:
+                    u.perform()
+                run.assert_not_called()
+                expected_phase = 'blocked' if candidate == '0.99.999' else 'idle'
+                self.assertEqual(json.loads((self.state / 'status.json').read_text())['phase'], expected_phase)
+                (self.state / 'last-attempt.json').unlink()
+                (self.state / 'status.json').unlink(missing_ok=True)
+
+    def test_same_generation_allows_incremental_updates(self):
+        self.p['generation'] = 1
+        self.p['image'] = BASE
+        self.perform()
+        committed = json.loads((self.state / 'committed.json').read_text())
+        self.assertEqual(committed, {'generation': 1, 'image': IMG, 'policy_image': BASE, 'version': '1.0.1'})
+        self.assertEqual(json.loads((self.state / 'status.json').read_text())['phase'], 'succeeded')
 
     def test_runtime_drift_rejected_before_pull(self):
         self.old_id = 'sha256:' + '9' * 64
@@ -225,6 +289,104 @@ class UpdateTests(unittest.TestCase):
         self.assertEqual(pull, ['pull', IMG])
         up = next(a for a in self.calls if a[0] == 'compose' and 'up' in a)
         self.assertEqual(up[-6:], ['-d', '--no-deps', '--no-build', '--pull', 'never', 'web'])
+
+
+class DiscoveryTests(unittest.TestCase):
+    def response(self, payload, status=200, length=None):
+        response = mock.Mock()
+        response.status = status
+        response.getheader.return_value = length
+        stream = io.BytesIO(payload)
+        response.read1.side_effect = stream.read
+        return response
+
+    def fetch(self, response):
+        conn = mock.Mock()
+        conn.getresponse.return_value = response
+        with mock.patch.object(u.http.client, 'HTTPSConnection', return_value=conn) as factory:
+            result = u.latest_version()
+        self.assertEqual(factory.call_args.args, (u.RELEASE_HOST,))
+        self.assertEqual(conn.request.call_args.args[:2], ('GET', u.RELEASE_PATH))
+        conn.close.assert_called_once()
+        return result
+
+    def test_fixed_api_stable_release_and_redirect_rejection(self):
+        payload = json.dumps({'draft': False, 'prerelease': False, 'tag_name': 'v1.2.3'}).encode()
+        self.assertEqual(self.fetch(self.response(payload)), '1.2.3')
+        with self.assertRaises(ValueError):
+            self.fetch(self.response(payload, status=302))
+        with self.assertRaises(ValueError):
+            self.fetch(self.response(payload, length='1048577'))
+        with self.assertRaises(ValueError):
+            self.fetch(self.response(b'x' * 1048577))
+        for tag in ('v1.2.3-rc.1', 'v01.2.3', '1.2.3', 'v1.2.3+build', 'v1.2', 'v1.2.3\n'):
+            with self.subTest(tag=tag), self.assertRaises(ValueError):
+                self.fetch(self.response(json.dumps({'draft': False, 'prerelease': False, 'tag_name': tag}).encode()))
+        for flag in ('draft', 'prerelease'):
+            value = {'draft': False, 'prerelease': False, 'tag_name': 'v1.2.3'}
+            value[flag] = True
+            with self.assertRaises(ValueError):
+                self.fetch(self.response(json.dumps(value).encode()))
+
+    def test_preview_digest_must_match_before_pull(self):
+        with mock.patch.object(u, '_official_digest', return_value=IMG), mock.patch.object(u, 'run') as run, self.assertRaises(ValueError):
+            u.resolve_digest('1.2.3', 'mirror', 'sha256:' + 'f' * 64)
+        run.assert_not_called()
+
+    def test_image_version_must_match_once(self):
+        for env in ([], ['NAPCAT_PLUS_VERSION=1.2.4'], ['NAPCAT_PLUS_VERSION=1.2.3', 'NAPCAT_PLUS_VERSION=1.2.3'], None):
+            with self.subTest(env=env), mock.patch.object(u, '_official_digest', return_value=IMG), mock.patch.object(u, 'run', side_effect=['', json.dumps([IMG]), NEW, json.dumps(env)]), self.assertRaises(ValueError):
+                u.resolve_digest('1.2.3', 'ghcr')
+
+    def test_fixed_source_and_digest_resolution(self):
+        digest = 'sha256:' + 'a' * 64
+        official = u.OFFICIAL + '@' + digest
+        mirror = u.SOURCES['mirror'] + '@' + digest
+        calls = []
+        def run(args, timeout=300):
+            calls.append(args)
+            if args[:2] == ['image', 'inspect']:
+                if args[3] == '{{json .RepoDigests}}':
+                    return json.dumps([mirror])
+                if args[3] == '{{json .Config.Env}}':
+                    return json.dumps(['NAPCAT_PLUS_VERSION=1.2.3'])
+                return NEW
+            return ''
+        with mock.patch.object(u, 'run', side_effect=run), mock.patch.object(u, '_official_digest', return_value=official):
+            self.assertEqual(u.resolve_digest('1.2.3', 'mirror'), (official, mirror, NEW))
+        self.assertEqual([c for c in calls if c[0] == 'pull'], [['pull', mirror]])
+        with mock.patch.object(u, 'run') as run_mock, self.assertRaises(ValueError):
+            u.resolve_digest('1.2.3', 'https://evil.example/image')
+        run_mock.assert_not_called()
+
+    def test_wrong_mirror_digests_rejected(self):
+        valid = IMG
+        other = u.OFFICIAL + '@sha256:' + 'f' * 64
+        for value in (None, [], [other], [valid, 123]):
+            with self.subTest(value=value), mock.patch.object(u, '_official_digest', return_value=valid), mock.patch.object(u, 'run', side_effect=['', json.dumps(value)]), self.assertRaises(ValueError):
+                u.resolve_digest('1.2.3', 'mirror')
+
+    def test_registry_manifest_and_token_fail_closed(self):
+        import hashlib
+        manifest = json.dumps({'schemaVersion': 2, 'mediaType': 'application/vnd.oci.image.index.v1+json'}).encode()
+        digest = 'sha256:' + hashlib.sha256(manifest).hexdigest()
+        headers = [('Content-Type', 'application/vnd.oci.image.index.v1+json'), ('Docker-Content-Digest', digest)]
+        responses = [(200, [], b'{"token":"abc123"}'), (200, headers, manifest)]
+        with mock.patch.object(u, 'registry_request', side_effect=responses) as registry:
+            self.assertEqual(u._official_digest('1.2.3'), u.OFFICIAL + '@' + digest)
+            self.assertEqual(registry.call_args_list[0].args[0], '/token?service=ghcr.io&scope=repository:ljy2231/napcat-plus:pull')
+            self.assertEqual(registry.call_args_list[1].args[0], '/v2/ljy2231/napcat-plus/manifests/v1.2.3')
+        for response in ((302, headers, manifest), (200, headers, manifest + b'x'), (200, [('Content-Type', 'text/html')], manifest), (200, headers + [('Docker-Content-Digest', digest)], manifest)):
+            with self.subTest(response=response), mock.patch.object(u, 'registry_request', side_effect=[responses[0], response]), self.assertRaises((ValueError, json.JSONDecodeError)):
+                u._official_digest('1.2.3')
+        with mock.patch.object(u, 'registry_request', return_value=(200, [], b'{"token":"bad\\r\\ntoken"}')), self.assertRaises(ValueError):
+            u._official_digest('1.2.3')
+
+    def test_semver_numeric_order(self):
+        self.assertGreater(u.version_parts('1.10.0'), u.version_parts('1.9.999'))
+        for bad in ('01.2.3', '1.2.3-rc', '1.2.3+foo', 'v1.2.3', '1.2', '1.2.3\n', None):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                u.version_parts(bad)
 
 
 class PolicyTests(unittest.TestCase):
@@ -358,6 +520,56 @@ class ServerTests(unittest.TestCase):
         client.connect(self.sockpath)
         self.addCleanup(client.close)
         return client
+
+    def test_preview_endpoint_rate_limit(self):
+        u.preview_time = float('-inf')
+        def get():
+            client = self.connect()
+            client.sendall(b'GET /preview HTTP/1.0\r\n\r\n')
+            result = b''
+            while True:
+                chunk = client.recv(4096)
+                if not chunk:
+                    return result
+                result += chunk
+        with mock.patch.object(u, 'latest_version', return_value='1.2.3'), mock.patch.object(u, '_official_digest', return_value=IMG):
+            response = get()
+            self.assertIn(b'200 OK', response)
+            body = json.loads(response.split(b'\r\n\r\n', 1)[1])
+            self.assertEqual(body, {'version': '1.2.3', 'digest': IMG.split('@')[1]})
+            self.assertIn(b'429', get())
+
+    def test_source_allowlist_and_legacy_request(self):
+        def request(body, extra=b''):
+            client = self.connect()
+            client.sendall(b'POST /update HTTP/1.1\r\nHost: localhost\r\nContent-Length: ' + str(len(body)).encode() + b'\r\n' + extra + b'\r\n' + body)
+            response = b''
+            while True:
+                data = client.recv(4096)
+                if not data:
+                    break
+                response += data
+            return response
+        with mock.patch.object(u, 'perform') as perform:
+            expected_digest = 'sha256:' + 'a' * 64
+            for source in ('ghcr', 'mirror'):
+                body = json.dumps({'source': source, 'expectedVersion': '1.2.3', 'expectedDigest': expected_digest}).encode()
+                self.assertIn(b'202 Accepted', request(body))
+                deadline = time.monotonic() + 1
+                while u.busy and time.monotonic() < deadline:
+                    time.sleep(0.001)
+                perform.assert_called_with(source, '1.2.3', expected_digest)
+            self.assertIn(b'202 Accepted', request(b''))
+            deadline = time.monotonic() + 1
+            while u.busy and time.monotonic() < deadline:
+                time.sleep(0.001)
+            perform.assert_called_with('ghcr', None, None)
+            perform.reset_mock()
+            for body in (b'{"source":"http://evil"}', b'{"source":"ghcr","env":{}}', b'{"source":"ghcr","source":"mirror"}', b'[]', b'x' * 257):
+                with self.subTest(body=body):
+                    self.assertIn(b'400 Bad Request', request(body))
+            self.assertIn(b'400 Bad Request', request(b'', b'Content-Length: 0\r\n'))
+            perform.assert_not_called()
 
     def test_slow_clients_expire_and_concurrency_is_bounded(self):
         # Fill every worker with a partial request; no third worker may be made.

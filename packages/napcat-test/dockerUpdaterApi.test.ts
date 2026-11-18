@@ -11,6 +11,9 @@ import { DockerUpdaterRouter } from '../napcat-webui-backend/src/router/DockerUp
 
 const ORIGINAL_ENV = { ...process.env };
 const ORIGIN = 'https://console.example.test';
+const VERSION = '0.5.3';
+const DIGEST = `sha256:${'a'.repeat(64)}`;
+const EXPECTATION = { source: 'ghcr', expectedVersion: VERSION, expectedDigest: DIGEST };
 const credential = Buffer.from(JSON.stringify(AuthHelper.signCredential(AuthHelper.generatePasswordHash('updater-test-token')))).toString('base64');
 let server: Server;
 let baseUrl: string;
@@ -59,7 +62,7 @@ function headers(extra: Record<string, string> = {}): Record<string, string> {
 async function get(suffix: string, requestHeaders: Record<string, string> = headers()) {
   return (await fetch(baseUrl + suffix, { headers: requestHeaders })).json();
 }
-async function post(suffix: string, requestHeaders: Record<string, string> = headers({ 'Content-Type': 'application/json' }), body = '{}') {
+async function post(suffix: string, requestHeaders: Record<string, string> = headers({ 'Content-Type': 'application/json' }), body = JSON.stringify(EXPECTATION)) {
   return (await fetch(baseUrl + suffix, { method: 'POST', headers: requestHeaders, body })).json();
 }
 
@@ -68,6 +71,7 @@ describe('Docker updater privileged API', () => {
     const credentials: Record<string, string>[] = [{}, { Authorization: 'Bearer invalid' }, { Authorization: 'Basic invalid' }];
     for (const requestHeaders of credentials) {
       expect(await get('/status', requestHeaders)).toMatchObject({ code: -1, message: 'Unauthorized' });
+      expect(await get('/preview', requestHeaders)).toMatchObject({ code: -1, message: 'Unauthorized' });
       expect(await post('/update', { ...requestHeaders, Origin: ORIGIN, 'Content-Type': 'application/json' })).toMatchObject({ code: -1, message: 'Unauthorized' });
     }
     expect(socketRequest).not.toHaveBeenCalled();
@@ -77,6 +81,7 @@ describe('Docker updater privileged API', () => {
     expect(await get(`/status?webui_token=${encodeURIComponent(credential)}`, {})).toMatchObject({ code: -1, message: 'Unauthorized' });
     for (const suffix of ['?webui_token=x', '?unused=1']) {
       expect(await get('/status' + suffix)).toMatchObject({ code: -1, message: 'Unauthorized' });
+      expect(await get('/preview' + suffix)).toMatchObject({ code: -1, message: 'Unauthorized' });
       expect(await post('/update' + suffix)).toMatchObject({ code: -1, message: 'Unauthorized' });
     }
     expect(socketRequest).not.toHaveBeenCalled();
@@ -95,11 +100,22 @@ describe('Docker updater privileged API', () => {
     expect(socketRequest).not.toHaveBeenCalled();
   });
 
-  it('rejects non-JSON and nonempty or invalid update bodies before host calls', async () => {
-    expect(await post('/update', headers({ 'Content-Type': 'text/plain' }))).toMatchObject({ code: -1, message: '仅接受空 JSON 对象' });
-    for (const body of ['{"image":"evil"}', '[]']) {
-      expect(await post('/update', headers({ 'Content-Type': 'application/json' }), body)).toMatchObject({ code: -1, message: '仅接受空 JSON 对象' });
+  it('rejects malformed or extra fields, arbitrary source and invalid expectation before host calls', async () => {
+    expect(await post('/update', headers({ 'Content-Type': 'text/plain' }))).toMatchObject({ code: -1, message: '更新请求参数无效' });
+    const invalid = [
+      {}, { image: 'evil' }, [], { source: 'ghcr' },
+      { ...EXPECTATION, source: 'https://evil.example/image' }, { ...EXPECTATION, source: 'GHCR' },
+      { ...EXPECTATION, source: null }, { ...EXPECTATION, source: ['ghcr'] },
+      { ...EXPECTATION, url: 'https://evil.example' }, { ...EXPECTATION, path: '/etc/shadow' },
+      { ...EXPECTATION, expectedVersion: 'v0.5.3' }, { ...EXPECTATION, expectedVersion: '0.05.3' },
+      { ...EXPECTATION, expectedVersion: '0.5.3-preview.1' }, { ...EXPECTATION, expectedVersion: '0.5.3\n' },
+      { ...EXPECTATION, expectedDigest: 'sha256:' + 'A'.repeat(64) }, { ...EXPECTATION, expectedDigest: 'a'.repeat(64) },
+      { ...EXPECTATION, expectedDigest: `${DIGEST}\n` }, { ...EXPECTATION, expectedDigest: null },
+    ];
+    for (const value of invalid) {
+      expect(await post('/update', headers({ 'Content-Type': 'application/json' }), JSON.stringify(value))).toMatchObject({ code: -1, message: '更新请求参数无效' });
     }
+    expect(await post('/update', headers({ 'Content-Type': 'application/json' }), JSON.stringify({ ...EXPECTATION, padding: 'x'.repeat(1024) }))).toMatchObject({ code: -1, message: '请求体长度无效' });
     // Express's strict JSON parser rejects a primitive before the router.
     const primitive = await fetch(baseUrl + '/update', { method: 'POST', headers: headers({ 'Content-Type': 'application/json' }), body: 'null' });
     expect(primitive.status).toBe(400);
@@ -109,18 +125,66 @@ describe('Docker updater privileged API', () => {
   it('reports disabled status and refuses updates without connecting to the host', async () => {
     delete process.env['NAPCAT_DOCKER_UPDATER'];
     expect(await get('/status')).toEqual({ code: 0, message: 'success', data: { enabled: false, phase: 'disabled' } });
+    expect(await get('/preview')).toMatchObject({ code: -1, message: '宿主更新器未启用' });
     expect(await post('/update')).toMatchObject({ code: -1, message: '宿主更新器未启用' });
     expect(socketRequest).not.toHaveBeenCalled();
   });
 
+  it('forwards only the source and preview expectations as length-delimited JSON', async () => {
+    const payloads: unknown[] = [];
+    socketRequest.mockImplementation(((options: { method: string }, callback: (res: EventEmitter) => void) => {
+      const request = new EventEmitter() as EventEmitter & { end: (body?: string) => void; destroy: (error?: Error) => void };
+      request.destroy = (error?: Error) => { if (error) process.nextTick(() => request.emit('error', error)); };
+      request.end = body => {
+        payloads.push(body);
+        process.nextTick(() => {
+          const response = new EventEmitter() as EventEmitter & { statusCode: number; setEncoding: () => void };
+          response.statusCode = options.method === 'POST' ? 202 : 200;
+          response.setEncoding = () => {};
+          callback(response);
+          response.emit('data', '{"phase":"updating"}');
+          response.emit('end');
+        });
+      };
+      return request;
+    }) as unknown as typeof http.request);
+    for (const source of ['ghcr', 'mirror']) {
+      expect(await post('/update', headers({ 'Content-Type': 'application/json' }), JSON.stringify({ ...EXPECTATION, source }))).toMatchObject({ code: 0, data: { phase: 'updating' } });
+    }
+    expect(payloads).toEqual([JSON.stringify(EXPECTATION), JSON.stringify({ ...EXPECTATION, source: 'mirror' })]);
+    for (const [index, call] of socketRequest.mock.calls.entries()) {
+      const options = call[0] as { socketPath: string; method: string; path: string; headers: Record<string, string> };
+      expect(options).toMatchObject({ socketPath: '/run/napcat-docker-updater/updater.sock', method: 'POST', path: '/update', headers: { 'Content-Type': 'application/json', 'Content-Length': String(Buffer.byteLength(payloads[index] as string)) } });
+    }
+  });
+
+  it('rejects an oversized host response without exposing its contents', async () => {
+    socketRequest.mockImplementation(((_options: unknown, callback: (res: EventEmitter) => void) => {
+      const request = new EventEmitter() as EventEmitter & { end: () => void; destroy: (error?: Error) => void };
+      request.destroy = (error?: Error) => { if (error) process.nextTick(() => request.emit('error', error)); };
+      request.end = () => process.nextTick(() => {
+        const response = new EventEmitter() as EventEmitter & { statusCode: number; setEncoding: () => void };
+        response.statusCode = 202;
+        response.setEncoding = () => {};
+        callback(response);
+        response.emit('data', 'x'.repeat(4097));
+        response.emit('end');
+      });
+      return request;
+    }) as unknown as typeof http.request);
+    expect(await post('/update')).toEqual({ code: -1, message: '宿主更新器不可用或正在更新' });
+  });
+
   it('fails closed when the host socket is missing without leaking socket errors', async () => {
     expect(await get('/status')).toEqual({ code: -1, message: '宿主更新器不可用' });
+    expect(await get('/preview')).toEqual({ code: -1, message: '宿主更新预检不可用' });
     expect(await post('/update')).toEqual({ code: -1, message: '宿主更新器不可用或正在更新' });
-    expect(socketRequest).toHaveBeenCalledTimes(2);
+    expect(socketRequest).toHaveBeenCalledTimes(3);
     const options = socketRequest.mock.calls.map(call => call[0] as { socketPath: string; method: string; path: string });
     expect(options).toEqual([
-      expect.objectContaining({ socketPath: '/run/napcat-docker-updater/updater.sock', method: 'GET', path: '/status' }),
-      expect.objectContaining({ socketPath: '/run/napcat-docker-updater/updater.sock', method: 'POST', path: '/update' }),
+      expect.objectContaining({ socketPath: '/run/napcat-docker-updater/updater.sock', method: 'GET', path: '/status', timeout: 3000 }),
+      expect.objectContaining({ socketPath: '/run/napcat-docker-updater/updater.sock', method: 'GET', path: '/preview', timeout: 45000 }),
+      expect.objectContaining({ socketPath: '/run/napcat-docker-updater/updater.sock', method: 'POST', path: '/update', timeout: 3000 }),
     ]);
   });
 });

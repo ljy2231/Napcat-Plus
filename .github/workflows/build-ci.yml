@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      NAPCAT_VERSION: 4.18.42+napcat-plus.0.5.2
+      NAPCAT_VERSION: 4.18.42+napcat-plus.0.5.3
     steps:
       - uses: actions/checkout@v5
         with:
@@ -32,7 +32,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: python3 deploy/test_install.py
-      - run: cd deploy/docker-updater && PYTHONDONTWRITEBYTECODE=1 python3 -m unittest test_updater test_isolated_socket test_prepare
+      - run: cd deploy/docker-updater && PYTHONDONTWRITEBYTECODE=1 python3 -m unittest test_updater test_isolated_socket test_prepare test_bootstrap
       - run: pnpm run typecheck
       - run: pnpm --filter napcat-test exec vitest run
       - run: pnpm --filter napcat-webui-frontend run test:console

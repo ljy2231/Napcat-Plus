@@ -38,12 +38,12 @@ describe('authenticated Console update check', () => {
     expect(check).not.toHaveBeenCalled();
   });
   test('allows a valid credential and returns the checker result', async () => {
-    const result = { currentVersion: '0.5.2', latestVersion: '0.6.0', status: 'available' };
+    const result = { currentVersion: '0.5.3', latestVersion: '0.6.0', status: 'available' };
     check.mockResolvedValueOnce(result);
     const credential = AuthHelper.signCredential(AuthHelper.generatePasswordHash('test-token'));
     const authorization = Buffer.from(JSON.stringify(credential)).toString('base64');
     const response = await fetch(`${baseUrl}/api/Console/update/check`, { headers: { Authorization: `Bearer ${authorization}` } });
     expect(await response.json()).toEqual({ code: 0, message: 'success', data: result });
-    expect(check).toHaveBeenCalledWith('0.5.2');
+    expect(check).toHaveBeenCalledWith('0.5.3');
   });
 });

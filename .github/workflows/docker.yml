@@ -12,7 +12,7 @@ on:
       version:
         description: Console version embedded in the image
         type: string
-        default: 0.5.2
+        default: 0.5.3
 
 permissions:
   contents: read
@@ -72,31 +72,53 @@ jobs:
           context: .
           file: deploy/Dockerfile
           platforms: linux/amd64
-          push: ${{ startsWith(github.ref, 'refs/tags/') || inputs.publish }}
-          tags: ${{ steps.meta.outputs.tags }}
+          load: true
+          push: false
+          tags: napcat-plus:verify
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             CONSOLE_VERSION=${{ steps.version.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Verify image starts and WebUI responds
-        if: startsWith(github.ref, 'refs/tags/') || inputs.publish
+      - name: Verify image before publishing any version tags
+        env:
+          EXPECTED_VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
-          TAG=$(echo "${{ steps.meta.outputs.tags }}" | head -n1)
-          docker pull "$TAG"
-          docker run -d --name verify -e WEBUI_TOKEN=verify-token-not-for-use -p 16099:6099 "$TAG"
+          trap 'docker rm -f verify >/dev/null 2>&1 || true' EXIT
+          docker run -d --name verify -e WEBUI_TOKEN=verify-token-not-for-use -p 16099:6099 napcat-plus:verify
           for i in $(seq 1 60); do
             if curl -fsS http://127.0.0.1:16099/webui/ >/dev/null 2>&1; then
-              echo "WebUI responded after ${i}s"
               break
             fi
             sleep 2
           done
-          docker logs verify 2>&1 | grep -q "Core Version" || { docker logs verify; exit 1; }
-          curl -fsS http://127.0.0.1:16099/webui/ >/dev/null || { docker logs verify; exit 1; }
-          docker rm -f verify
+          curl -fsS http://127.0.0.1:16099/webui/ >/dev/null
+          docker inspect verify --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -Fx "NAPCAT_PLUS_VERSION=${EXPECTED_VERSION}"
+          python3 - <<'PY'
+          import hashlib, json, os, urllib.request
+          base = 'http://127.0.0.1:16099/api'
+          payload = json.dumps({'hash': hashlib.sha256(b'verify-token-not-for-use.napcat').hexdigest()}).encode()
+          req = urllib.request.Request(base + '/auth/login', data=payload, headers={'Content-Type': 'application/json'})
+          with urllib.request.urlopen(req, timeout=10) as response:
+              credential = json.load(response)['data']['Credential']
+          req = urllib.request.Request(base + '/Console/status', headers={'Authorization': 'Bearer ' + credential})
+          with urllib.request.urlopen(req, timeout=10) as response:
+              assert json.load(response)['data']['version'] == os.environ['EXPECTED_VERSION']
+          PY
+
+      - name: Publish the verified image
+        if: startsWith(github.ref, 'refs/tags/') || inputs.publish
+        env:
+          PUBLISH_TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          set -euo pipefail
+          while IFS= read -r tag; do
+            [[ -n "$tag" ]] || continue
+            docker tag napcat-plus:verify "$tag"
+            docker push "$tag"
+          done <<< "$PUBLISH_TAGS"
 
       - name: Summary
         if: always()

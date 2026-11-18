@@ -1,3 +1,30 @@
+export type DockerUpdateSource = 'ghcr' | 'mirror';
+export interface DockerUpdatePreview {
+  version: string;
+  digest: string;
+}
+
+/** Reject incomplete or malformed previews: confirmation must bind to an exact artifact. */
+export function parseDockerUpdatePreview (input: unknown): DockerUpdatePreview | undefined {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return undefined;
+  const value = input as Record<string, unknown>;
+  if (typeof value.version !== 'string' || value.version.length > 128 ||
+      !/^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/.test(value.version)) return undefined;
+  if (typeof value.digest !== 'string' || !/^sha256:[a-f0-9]{64}$/.test(value.digest)) return undefined;
+  return { version: value.version, digest: value.digest };
+}
+
+/** Prefer the server's message for HTTP errors, then the actual transport error. */
+export function dockerUpdateError (error: unknown): string {
+  if (error && typeof error === 'object') {
+    const response = (error as { response?: { data?: { message?: unknown } } }).response;
+    if (typeof response?.data?.message === 'string' && response.data.message) return response.data.message;
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === 'string' && message) return message;
+  }
+  return typeof error === 'string' && error ? error : '未知错误';
+}
+
 export type DockerUpdatePhase = 'disabled' | 'idle' | 'pulling' | 'applying' | 'rolling_back' | 'succeeded' | 'failed' | 'blocked' | 'rate_limited';
 export interface DockerUpdateStatus {
   enabled: boolean;
@@ -27,7 +54,7 @@ export function dockerUpdateBusy (phase: DockerUpdatePhase): boolean {
 }
 
 export function dockerUpdatePhaseLabel (phase: DockerUpdatePhase): string {
-  return ({ disabled: '更新器未启用', idle: '更新器空闲', pulling: '正在拉取已批准镜像', applying: '正在替换容器', rolling_back: '更新失败，正在回滚', succeeded: '镜像更新完成', failed: '更新失败，已尝试恢复', blocked: '更新受阻，需要管理员处理', rate_limited: '操作过于频繁，请等待后重试' })[phase];
+  return ({ disabled: '更新器未启用', idle: '更新器空闲', pulling: '正在拉取镜像', applying: '正在替换容器', rolling_back: '更新失败，正在回滚', succeeded: '镜像更新完成', failed: '更新失败，已尝试恢复', blocked: '更新受阻，需要管理员处理', rate_limited: '操作过于频繁，请等待后重试' })[phase];
 }
 
 export function canStartDockerUpdate (status: DockerUpdateStatus | undefined, pending: boolean, uncertain: boolean): boolean {

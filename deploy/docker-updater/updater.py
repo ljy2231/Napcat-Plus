@@ -2,9 +2,13 @@
 """Host-only fixed-policy updater. This program must never run in the app container."""
 import fcntl
 import grp
+import hashlib
 import http.server
+import http.client
+import ssl
 import json
 import os
+import queue
 import re
 import socket
 import socketserver
@@ -29,7 +33,173 @@ MOUNTS = {'qq': '/app/.config/QQ', 'config': '/app/napcat/config', 'plugins': '/
 DOCKER = '/usr/bin/docker'
 IMAGE = re.compile(r'^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$')
 NAME = re.compile(r'^[a-z0-9][a-z0-9_-]{0,62}$')
+HOSTNAME = re.compile(r'^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$')
 ID = re.compile(r'^sha256:[a-f0-9]{64}$')
+OFFICIAL = 'ghcr.io/ljy2231/napcat-plus'
+SOURCES = {'ghcr': OFFICIAL, 'mirror': 'hub.002230.xyz:44300/ghcr.io/ljy2231/napcat-plus'}
+RELEASE_HOST = 'api.github.com'
+RELEASE_PATH = '/repos/ljy2231/Napcat-Plus/releases/latest'
+SEMVER = re.compile(r'^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$')
+DISCOVERY_SLOT = threading.BoundedSemaphore(1)
+
+
+def version_parts(value):
+    if not isinstance(value, str) or len(value) > 128 or not SEMVER.fullmatch(value):
+        raise ValueError('stable strict semver required')
+    return tuple(int(x) for x in value.split('.'))
+
+
+def latest_version():
+    return bounded_discovery(_fetch_latest_version)
+
+
+def bounded_discovery(operation):
+    # DNS, TLS and response headers also need an absolute deadline: socket
+    # inactivity timeouts alone can be defeated by slow-trickling headers.
+    if not DISCOVERY_SLOT.acquire(blocking=False):
+        raise TimeoutError('previous release request still running')
+    result = queue.Queue(maxsize=1)
+    def fetch():
+        try:
+            try:
+                result.put((True, operation()))
+            except Exception as error:
+                result.put((False, error))
+        finally:
+            DISCOVERY_SLOT.release()
+    try:
+        threading.Thread(target=fetch, daemon=True).start()
+    except BaseException:
+        DISCOVERY_SLOT.release()
+        raise
+    try:
+        ok, value = result.get(timeout=15)
+    except queue.Empty:
+        raise TimeoutError('release request deadline exceeded')
+    if not ok:
+        raise value
+    return value
+
+
+def _fetch_latest_version():
+    # Fixed TLS endpoint, no redirects, bounded response and an absolute deadline.
+    # Trust is GitHub's account and the host TLS trust store, not release signatures.
+    deadline = time.monotonic() + 15
+    conn = http.client.HTTPSConnection(RELEASE_HOST, timeout=10, context=ssl.create_default_context())
+    try:
+        conn.request('GET', RELEASE_PATH, headers={'Accept': 'application/vnd.github+json',
+                     'User-Agent': 'napcat-docker-updater', 'Accept-Encoding': 'identity'})
+        sock = conn.sock
+        response = conn.getresponse()
+        if response.status != 200:
+            raise ValueError('release API returned non-200 response')
+        length = response.getheader('Content-Length')
+        if length is not None and (not length.isascii() or not length.isdigit() or int(length) > 1048576):
+            raise ValueError('release response too large')
+        data = bytearray()
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError('release request deadline exceeded')
+            # read1 bounds each socket read, allowing the absolute deadline to be checked.
+            sock.settimeout(remaining)
+            chunk = response.read1(min(65536, 1048577 - len(data)))
+            if not chunk:
+                break
+            data.extend(chunk)
+            if len(data) > 1048576:
+                raise ValueError('release response too large')
+        release = json.loads(data)
+        if not isinstance(release, dict) or release.get('draft') is not False or release.get('prerelease') is not False:
+            raise ValueError('release must be published and stable')
+        tag = release.get('tag_name')
+        if not isinstance(tag, str) or not tag.startswith('v'):
+            raise ValueError('invalid release tag')
+        version_parts(tag[1:])
+        return tag[1:]
+    finally:
+        conn.close()
+
+
+def registry_request(path, headers, limit):
+    # Host and paths are generated internally; redirects and proxy env ignored.
+    conn = http.client.HTTPSConnection('ghcr.io', timeout=10, context=ssl.create_default_context())
+    deadline = time.monotonic() + 15
+    try:
+        conn.request('GET', path, headers=headers)
+        sock = conn.sock
+        response = conn.getresponse()
+        length = response.getheader('Content-Length')
+        if length is not None and (not length.isascii() or not length.isdigit() or int(length) > limit):
+            raise ValueError('registry response too large')
+        data = bytearray()
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError('registry deadline exceeded')
+            sock.settimeout(remaining)
+            chunk = response.read1(min(65536, limit + 1 - len(data)))
+            if not chunk:
+                break
+            data.extend(chunk)
+            if len(data) > limit:
+                raise ValueError('registry response too large')
+        return response.status, response.getheaders(), bytes(data)
+    finally:
+        conn.close()
+
+
+def _official_digest(version):
+    # No challenge redirects: always use the hard-coded anonymous token scope.
+    status, _, data = registry_request('/token?service=ghcr.io&scope=repository:ljy2231/napcat-plus:pull',
+                                       {'Accept': 'application/json', 'Accept-Encoding': 'identity'}, 32768)
+    if status != 200:
+        raise ValueError('registry token request failed')
+    token = json.loads(data).get('token')
+    if not isinstance(token, str) or not re.fullmatch(r'[A-Za-z0-9._~+/=-]{1,16384}', token):
+        raise ValueError('invalid registry token')
+    path = '/v2/ljy2231/napcat-plus/manifests/v' + version
+    types = ('application/vnd.oci.image.index.v1+json', 'application/vnd.docker.distribution.manifest.list.v2+json',
+             'application/vnd.oci.image.manifest.v1+json', 'application/vnd.docker.distribution.manifest.v2+json')
+    status, headers, data = registry_request(path, {'Authorization': 'Bearer ' + token,
+                     'Accept': ', '.join(types), 'Accept-Encoding': 'identity'}, 1048576)
+    if status != 200:
+        raise ValueError('registry manifest request failed')
+    content_types = [v for k, v in headers if k.lower() == 'content-type']
+    if len(content_types) != 1 or content_types[0].split(';', 1)[0].strip() not in types:
+        raise ValueError('invalid manifest type')
+    manifest = json.loads(data)
+    if not isinstance(manifest, dict) or manifest.get('schemaVersion') != 2 or manifest.get('mediaType') not in types:
+        raise ValueError('invalid manifest')
+    digest = 'sha256:' + hashlib.sha256(data).hexdigest()
+    declared = [v for k, v in headers if k.lower() == 'docker-content-digest']
+    if len(declared) != 1 or declared[0] != digest:
+        raise ValueError('registry digest mismatch')
+    return OFFICIAL + '@' + digest
+
+
+def resolve_digest(version, source, expected_digest=None):
+    version_parts(version)
+    if source not in SOURCES:
+        raise ValueError('invalid source')
+    official_ref = bounded_discovery(lambda: _official_digest(version))
+    if expected_digest is not None and official_ref.split('@', 1)[1] != expected_digest:
+        raise ValueError('release digest changed since preview')
+    target = SOURCES[source] + '@' + official_ref.split('@', 1)[1]
+    run(['pull', target], 600)
+    pulled = json.loads(run(['image', 'inspect', '--format', '{{json .RepoDigests}}', target]))
+    if not isinstance(pulled, list) or not all(isinstance(d, str) for d in pulled) or target not in pulled:
+        raise ValueError('pulled image digest does not match fixed repository')
+    image_id = run(['image', 'inspect', '--format', '{{.Id}}', target])
+    if not ID.fullmatch(image_id):
+        raise ValueError('cannot identify pulled image')
+    env = json.loads(run(['image', 'inspect', '--format', '{{json .Config.Env}}', target]))
+    if not isinstance(env, list) or not all(isinstance(item, str) for item in env):
+        raise ValueError('invalid image metadata')
+    versions = [item for item in env if item.startswith('NAPCAT_PLUS_VERSION=')]
+    if versions != ['NAPCAT_PLUS_VERSION=' + version]:
+        raise ValueError('image version does not match release')
+    return official_ref, target, image_id
 
 
 def atomic_json(path, value):
@@ -142,7 +312,7 @@ def load_policy():
     # renaming it (hostname changes can alter the QQ device fingerprint).
     for key in ('container_name', 'hostname'):
         value = service.get(key)
-        if value is not None and (not isinstance(value, str) or not NAME.fullmatch(value)):
+        if value is not None and (not isinstance(value, str) or not HOSTNAME.fullmatch(value)):
             raise ValueError('invalid container name or hostname')
     # Three fixed data directories and one fixed read-only socket-directory bind.
     # A read-only bind does NOT prevent connecting to the Unix socket; the app
@@ -218,7 +388,7 @@ def wait_healthy(container, image):
         time.sleep(2)
 
 
-def perform():
+def perform(source='ghcr', expected_version=None, expected_digest=None):
     # flock covers process crashes/restarts and other updater instances.
     with (STATE / 'lock').open('a') as lock:
         try:
@@ -249,14 +419,49 @@ def perform():
             # An administrator must establish the initial known-good baseline offline.
             # Missing/corrupt state cannot silently reset the anti-downgrade floor.
             previous = read_json(committed_file)
-            if (not isinstance(previous, dict) or set(previous) != {'generation', 'image'} or
+            if isinstance(previous, dict) and set(previous) == {'generation', 'image'}:
+                status('blocked', 'legacy baseline requires administrator migration with a verified version')
+                return
+            if (not isinstance(previous, dict) or set(previous) != {'generation', 'image', 'version', 'policy_image'} or
                     not isinstance(previous['generation'], int) or isinstance(previous['generation'], bool) or
                     previous['generation'] < 0 or not isinstance(previous['image'], str) or
-                    not IMAGE.fullmatch(previous['image'])):
+                    not IMAGE.fullmatch(previous['image']) or not isinstance(previous['policy_image'], str) or
+                    not IMAGE.fullmatch(previous['policy_image'])):
                 raise ValueError('invalid committed baseline')
-            if previous and (p['generation'] < previous['generation'] or
-                             (p['generation'] == previous['generation'] and p['image'] != previous['image'])):
+            version_parts(previous['version'])
+            if p['generation'] < previous['generation'] or (p['generation'] == previous['generation'] and p['image'] != previous['policy_image']):
                 raise ValueError('policy generation downgrade or digest reuse')
+            if source not in SOURCES:
+                raise ValueError('invalid source')
+            try:
+                version = latest_version()
+                version_parts(version)
+            except Exception as error:
+                journal_error('preflight', error)
+                status('failed', 'release discovery failed; retry later')
+                return
+            if expected_version is not None and version != expected_version:
+                status('failed', 'release changed since preview; review again')
+                return
+            if version_parts(version) < version_parts(previous['version']):
+                raise ValueError('official release version is below the installed baseline')
+            if version_parts(version) == version_parts(previous['version']):
+                try:
+                    same_version_ref = bounded_discovery(lambda: _official_digest(version))
+                    if expected_digest is not None and same_version_ref.split('@', 1)[1] != expected_digest:
+                        status('failed', 'release digest changed since preview; review again')
+                        return
+                    installed_ref = previous['image'].split('@', 1)[1]
+                    if same_version_ref.split('@', 1)[1] != installed_ref:
+                        raise ValueError('published digest changed for the installed version; administrator review required')
+                except ValueError:
+                    raise
+                except Exception as error:
+                    journal_error('preflight', error)
+                    status('failed', 'release digest discovery failed; retry later')
+                    return
+                status('idle', 'no newer stable release', generation=p['generation'])
+                return
             # The base Compose file is the persistent committed image, never the
             # pending target. Ordinary compose up must restore the known-good image
             # while an update is attempted or after a failure.
@@ -270,7 +475,7 @@ def perform():
             # No override is needed for ps: it only changes the service image.
             with tempfile.TemporaryDirectory(prefix='override-', dir=STATE) as tmp:
                 override = Path(tmp) / 'image.json'
-                override.write_text(json.dumps({'services': {p['service']: {'image': p['image']}}}))
+                override.write_text(json.dumps({'services': {p['service']: {'image': previous['image']}}}))
                 container = compose(p, override, ['ps', '-q', '--all', p['service']])
                 if not re.fullmatch(r'[a-f0-9]{12,64}', container):
                     raise ValueError('exactly one existing service container required')
@@ -281,18 +486,19 @@ def perform():
                 approved_id = run(['image', 'inspect', '--format', '{{.Id}}', previous['image']])
                 if not ID.fullmatch(approved_id) or old_id != approved_id:
                     raise ValueError('current image differs from committed generation')
-                if p['generation'] == previous['generation']:
-                    status('idle', 'approved generation already applied', generation=p['generation'])
+                try:
+                    official_ref, target, new_id = resolve_digest(version, source, expected_digest)
+                except Exception as error:
+                    journal_error('preflight', error)
+                    status('failed', 'image discovery or pull failed; retry later')
                     return
-                run(['pull', p['image']], 600)
-                new_id = run(['image', 'inspect', '--format', '{{.Id}}', p['image']])
-                if not ID.fullmatch(new_id):
-                    raise ValueError('cannot identify pulled image')
+                override.write_text(json.dumps({'services': {p['service']: {'image': target}}}))
                 # Keep the old ID reachable even if the old container is replaced/pruned.
                 backup = f"napcat-updater-backup-{p['project']}-{p['service']}:previous"
                 run(['tag', old_id, backup])
                 atomic_json(pending_file, {'old_image_id': old_id, 'backup_tag': backup,
-                                           'target_image': p['image'], 'generation': p['generation']})
+                                           'target_image': target, 'official_image': official_ref,
+                                           'version': version, 'generation': p['generation']})
                 status('applying', 'starting approved image', generation=p['generation'])
                 try:
                     compose(p, override, ['up', '-d', '--no-deps', '--no-build', '--pull', 'never', p['service']], 300)
@@ -309,7 +515,7 @@ def perform():
                     journal_error('apply', error)
                     status('rolling_back', 'update failed; restoring previous image', generation=p['generation'])
                     try:
-                        override.write_text(json.dumps({'services': {p['service']: {'image': previous['image']}}}))
+                        override.write_text(json.dumps({'services': {p['service']: {'image': backup}}}))
                         compose(p, override, ['up', '-d', '--no-deps', '--no-build', '--pull', 'never', p['service']], 300)
                         restored = compose(p, override, ['ps', '-q', '--all', p['service']])
                         if not re.fullmatch(r'[a-f0-9]{12,64}', restored):
@@ -326,8 +532,9 @@ def perform():
                 # Once starting this phase, never rollback automatically: a write can
                 # succeed yet raise during directory fsync. Recovery stays manual.
                 try:
-                    commit_compose_image(p, previous['image'], p['image'])
-                    atomic_json(committed_file, {'generation': p['generation'], 'image': p['image']})
+                    commit_compose_image(p, previous['image'], target)
+                    atomic_json(committed_file, {'generation': p['generation'], 'image': target,
+                                                 'version': version, 'policy_image': p['image']})
                     clear_pending(pending_file)
                 except Exception as error:
                     journal_error('commit', error)
@@ -369,26 +576,32 @@ class Server(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
 
     def finish_request(self, request, client_address):
         request.settimeout(self.request_deadline)
-        # SO_RCVTIMEO alone is an inactivity timeout; abort the entire request
-        # at a fixed deadline even if an attacker trickles individual bytes.
-        def expire():
-            try:
-                request.shutdown(socket.SHUT_RDWR)
-            except OSError:
-                pass
-        timer = threading.Timer(self.request_deadline, expire)
-        timer.daemon = True
-        timer.start()
         try:
             super().finish_request(request, client_address)
         except (BrokenPipeError, ConnectionResetError, socket.timeout):
             pass
-        finally:
-            timer.cancel()
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
     protocol_version = 'HTTP/1.0'
+    def setup(self):
+        super().setup()
+        def expire():
+            try:
+                self.connection.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+        self._request_timer = threading.Timer(self.server.request_deadline, expire)
+        self._request_timer.daemon = True
+        self._request_timer.start()
+    def finish(self):
+        self._request_timer.cancel()
+        super().finish()
+    def request_complete(self):
+        # Only slow client input is limited to five seconds. Discovery has its
+        # own bounded deadline and must be allowed to finish before replying.
+        self._request_timer.cancel()
+        self.connection.settimeout(5)
     def log_message(self, *_):
         pass
     def parse_request(self):
@@ -422,6 +635,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
     def do_GET(self):
+        self.request_complete()
+        if self.path == '/preview':
+            global preview_time
+            with preview_lock:
+                now = time.monotonic()
+                if now - preview_time < 5:
+                    return self.answer(429, {'error': 'rate limited'})
+                preview_time = now
+            try:
+                version = latest_version()
+                digest = bounded_discovery(lambda: _official_digest(version)).split('@', 1)[1]
+                return self.answer(200, {'version': version, 'digest': digest})
+            except Exception as error:
+                journal_error('preflight', error)
+                return self.answer(503, {'error': 'discovery failed'})
         if self.path != '/status':
             return self.answer(404, {'error': 'not found'})
         try:
@@ -434,8 +662,38 @@ class Handler(http.server.BaseHTTPRequestHandler):
         # block must not reach the state-changing endpoint.
         if self.request_version != 'HTTP/1.1' or not self.headers.get('Host'):
             return self.answer(400, {'error': 'invalid request'})
-        if self.path != '/update' or self.headers.get('Content-Length') != '0' or self.headers.get('Transfer-Encoding'):
+        lengths = self.headers.get_all('Content-Length', [])
+        if self.path != '/update' or len(lengths) != 1 or self.headers.get_all('Transfer-Encoding'):
             return self.answer(400, {'error': 'invalid request'})
+        length = lengths[0]
+        if not length.isascii() or not length.isdigit() or len(length) > 3 or int(length) > 256:
+            return self.answer(400, {'error': 'invalid request'})
+        source = 'ghcr'
+        expected_version = expected_digest = None
+        if int(length):
+            try:
+                body = self.rfile.read(int(length))
+                if len(body) != int(length):
+                    raise ValueError('incomplete body')
+                def unique_pairs(pairs):
+                    result = {}
+                    for key, value in pairs:
+                        if key in result:
+                            raise ValueError('duplicate key')
+                        result[key] = value
+                    return result
+                obj = json.loads(body, object_pairs_hook=unique_pairs)
+                if not isinstance(obj, dict) or set(obj) != {'source', 'expectedVersion', 'expectedDigest'} or not isinstance(obj['source'], str) or obj['source'] not in SOURCES:
+                    raise ValueError('invalid request')
+                version_parts(obj['expectedVersion'])
+                if not isinstance(obj['expectedDigest'], str) or not ID.fullmatch(obj['expectedDigest']):
+                    raise ValueError('invalid digest')
+                source = obj['source']
+                expected_version = obj['expectedVersion']
+                expected_digest = obj['expectedDigest']
+            except (ValueError, UnicodeDecodeError):
+                return self.answer(400, {'error': 'invalid request'})
+        self.request_complete()
         with busy_lock:
             global busy
             if busy:
@@ -444,7 +702,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         def worker():
             global busy
             try:
-                perform()
+                perform(source, expected_version, expected_digest)
             finally:
                 with busy_lock:
                     busy = False
@@ -454,6 +712,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
 busy_lock = threading.Lock()
 busy = False
+preview_lock = threading.Lock()
+preview_time = float('-inf')
 
 
 def main():

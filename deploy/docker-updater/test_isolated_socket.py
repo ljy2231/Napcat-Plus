@@ -21,8 +21,10 @@ from unittest import mock
 spec = importlib.util.spec_from_file_location('isolated_updater_under_test', Path(__file__).with_name('updater.py'))
 u = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(u)
-BASE = 'registry.example/app@sha256:' + 'a' * 64
-TARGET = 'registry.example/app@sha256:' + 'b' * 64
+BASE = 'ghcr.io/ljy2231/napcat-plus@sha256:' + 'a' * 64
+TARGET = 'ghcr.io/ljy2231/napcat-plus@sha256:' + 'b' * 64
+TARGET_DIGEST = 'sha256:' + 'b' * 64
+VERSION = '0.5.3'
 OLD_ID = 'sha256:' + '1' * 64
 NEW_ID = 'sha256:' + '2' * 64
 CID = 'c' * 64
@@ -60,7 +62,7 @@ class FakeDocker:
                 image = override['services']['web']['image']
                 if image == TARGET and self.fail_update:
                     raise subprocess.CalledProcessError(1, 'simulated docker')
-                if image not in (BASE, TARGET):
+                if image not in (BASE, TARGET, 'napcat-updater-backup-isolated-test-web:previous'):
                     raise AssertionError('unexpected image requested')
                 self.image = NEW_ID if image == TARGET else OLD_ID
                 return ''
@@ -101,7 +103,7 @@ class IsolatedSocketTests(unittest.TestCase):
         }}}))
         self.policy.write_text(json.dumps({'project': 'isolated-test', 'service': 'web',
                                            'compose_file': str(self.compose), 'image': TARGET, 'generation': 2}))
-        (self.state / 'committed.json').write_text(json.dumps({'generation': 1, 'image': BASE}))
+        (self.state / 'committed.json').write_text(json.dumps({'generation': 1, 'image': BASE, 'version': '0.5.1', 'policy_image': BASE}))
         self.fake = FakeDocker(self.compose)
         self.finished = threading.Event()
         original_lstat = Path.lstat
@@ -128,6 +130,10 @@ class IsolatedSocketTests(unittest.TestCase):
             # production policy. This mock is not a permissions test.
             mock.patch.object(u, 'trusted_path', side_effect=self.assert_temp_path),
             mock.patch.object(u, 'run', side_effect=self.fake),
+            mock.patch.object(u, 'latest_version', return_value=VERSION),
+            mock.patch.object(u, '_official_digest', return_value=TARGET),
+            mock.patch.object(u, 'resolve_digest', side_effect=self.resolve_digest),
+            mock.patch.object(u.socket, 'create_connection', side_effect=AssertionError('real network forbidden')),
             # Fail closed even if a future code path bypasses the run() mock.
             mock.patch.object(subprocess, 'run', side_effect=AssertionError('real subprocess forbidden')),
         ]
@@ -135,20 +141,29 @@ class IsolatedSocketTests(unittest.TestCase):
             patch.start()
             self.addCleanup(patch.stop)
         self.original_perform = u.perform
-        def perform_and_signal():
+        def perform_and_signal(*args):
             try:
-                self.original_perform()
+                self.original_perform(*args)
             finally:
                 self.finished.set()
         self.perform_patch = mock.patch.object(u, 'perform', side_effect=perform_and_signal)
         self.perform_patch.start()
         self.addCleanup(self.perform_patch.stop)
         u.busy = False
+        u.preview_time = float('-inf')
         self.server = u.Server(self.socket_path, u.Handler)
         os.chmod(self.socket_path, 0o660)
         self.server_thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.server_thread.start()
         self.addCleanup(self.close_server)
+
+    def resolve_digest(self, version, source, expected_digest=None):
+        self.assertEqual(version, VERSION)
+        self.assertEqual(source, 'ghcr')
+        if expected_digest is not None and expected_digest != TARGET_DIGEST:
+            raise ValueError('digest changed')
+        self.fake(['pull', TARGET])
+        return TARGET, TARGET, NEW_ID
 
     def assert_temp_path(self, path):
         path = Path(path)
@@ -164,11 +179,12 @@ class IsolatedSocketTests(unittest.TestCase):
         if u.busy:
             self.assertTrue(self.finished.wait(5), 'worker did not finish')
 
-    def request(self, method, endpoint):
+    def request(self, method, endpoint, body=None):
         connection = UnixHTTPConnection(self.socket_path)
         try:
-            headers = {'Content-Length': '0'} if method == 'POST' else {}
-            connection.request(method, endpoint, headers=headers)
+            payload = json.dumps(body).encode() if body is not None else None
+            headers = {'Content-Length': str(len(payload or b'')), 'Content-Type': 'application/json'} if method == 'POST' else {}
+            connection.request(method, endpoint, body=payload, headers=headers)
             response = connection.getresponse()
             return response.status, json.loads(response.read())
         finally:
@@ -177,13 +193,15 @@ class IsolatedSocketTests(unittest.TestCase):
     def test_socket_update_commits_approved_image(self):
         status, initial = self.request('GET', '/status')
         self.assertEqual((status, initial['phase']), (200, 'idle'))
-        status, accepted = self.request('POST', '/update')
+        status, preview = self.request('GET', '/preview')
+        self.assertEqual((status, preview), (200, {'version': VERSION, 'digest': TARGET_DIGEST}))
+        status, accepted = self.request('POST', '/update', {'source': 'ghcr', 'expectedVersion': preview['version'], 'expectedDigest': preview['digest']})
         self.assertEqual((status, accepted), (202, {'accepted': True}))
         self.assertTrue(self.finished.wait(5), 'update worker did not finish')
         status, result = self.request('GET', '/status')
         self.assertEqual((status, result['phase']), (200, 'succeeded'))
         self.assertEqual(json.loads(self.compose.read_text())['services']['web']['image'], TARGET)
-        self.assertEqual(json.loads((self.state / 'committed.json').read_text()), {'image': TARGET, 'generation': 2})
+        self.assertEqual(json.loads((self.state / 'committed.json').read_text()), {'image': TARGET, 'generation': 2, 'version': VERSION, 'policy_image': TARGET})
         self.assertFalse((self.state / 'pending.json').exists())
         self.assertEqual(self.fake.image, NEW_ID)
         self.assertEqual(len([a for a in self.fake.calls if 'up' in a]), 1)
@@ -199,6 +217,21 @@ class IsolatedSocketTests(unittest.TestCase):
         self.assertEqual(json.loads((self.state / 'committed.json').read_text())['image'], BASE)
         self.assertFalse((self.state / 'pending.json').exists())
         self.assertEqual(self.fake.image, OLD_ID)
+
+    def test_changed_preview_never_pulls_or_recreates(self):
+        for expectation in ({'source': 'ghcr', 'expectedVersion': '0.5.2', 'expectedDigest': TARGET_DIGEST},
+                            {'source': 'ghcr', 'expectedVersion': VERSION, 'expectedDigest': 'sha256:' + 'f' * 64}):
+            with self.subTest(expectation=expectation):
+                self.finished.clear()
+                self.fake.calls.clear()
+                for name in ('last-attempt.json', 'status.json'):
+                    (self.state / name).unlink(missing_ok=True)
+                status, _ = self.request('POST', '/update', expectation)
+                self.assertEqual(status, 202)
+                self.assertTrue(self.finished.wait(5))
+                self.assertFalse(any(args[0] == 'pull' or 'up' in args for args in self.fake.calls))
+                self.assertEqual(self.request('GET', '/status')[1]['phase'], 'failed')
+                self.assertEqual(self.fake.image, OLD_ID)
 
     def test_unknown_request_does_not_invoke_update(self):
         status, _ = self.request('POST', '/update?image=other')

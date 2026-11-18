@@ -11,7 +11,7 @@ set -euo pipefail
 
 export NAPCAT_PLUS_MIRROR="${NAPCAT_PLUS_MIRROR:-hub.002230.xyz:44300}"
 
-IMAGE="${NAPCAT_PLUS_IMAGE:-ghcr.io/ljy2231/napcat-plus:v0.5.2}"
+IMAGE="${NAPCAT_PLUS_IMAGE:-ghcr.io/ljy2231/napcat-plus:v0.5.3}"
 # A mirror is a registry host that proxies the original registry path, so the
 # image reference is simply prefixed. Works with e.g. hub.002230.xyz:44300.
 if [[ -n "${NAPCAT_PLUS_MIRROR:-}" ]]; then
@@ -85,6 +85,9 @@ fi
 umask 077
 mkdir -p "$DIR" || fail "无法创建安装目录 $DIR；请用 root 运行或先授予目录写权限。"
 DIR="$(cd "$DIR" && pwd -P)"
+if [[ "$DIR" == /opt/napcat-plus && ( -f /etc/napcat-docker-updater/policy.json || -d /var/lib/napcat-updater-setup ) ]]; then
+  fail "此安装已由网页更新器接管或有未完成的启用记录；请使用网页更新，不要用安装器覆盖 Compose。"
+fi
 mkdir -p "$DIR/qq" "$DIR/config" "$DIR/plugins"
 cd "$DIR"
 
@@ -178,3 +181,5 @@ say "  更新    : ${DC[*]} -f $DIR/compose.yaml pull && ${DC[*]} -f $DIR/compos
 say "  日志    : ${DC[*]} -f $DIR/compose.yaml logs -f"
 say ""
 say "注意：不要执行 down -v；数据在 ${DIR} 的绑定目录中，删除容器不会清除账号数据。"
+say "网页在线更新需要在 Linux 宿主机首次启用：参阅 deploy/docker-updater/README.md（0.5.3）。"
+say "启用脚本：https://raw.githubusercontent.com/ljy2231/Napcat-Plus/v0.5.3/deploy/enable-updates.sh（启用组件及版本元数据需要直连 GitHub/GHCR）"
