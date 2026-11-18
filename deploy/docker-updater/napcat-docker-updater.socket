@@ -1,0 +1,13 @@
+[Unit]
+Description=Restricted NapCat Docker updater socket
+
+[Socket]
+ListenStream=/run/napcat-docker-updater/updater.sock
+SocketMode=0660
+SocketUser=root
+SocketGroup=napcat-updater
+DirectoryMode=0755
+RemoveOnStop=yes
+
+[Install]
+WantedBy=sockets.target

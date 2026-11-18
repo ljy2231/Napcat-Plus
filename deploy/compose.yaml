@@ -1,7 +1,7 @@
 name: ${COMPOSE_PROJECT_NAME:-napcat-plus}
 services:
   console:
-    image: napcat-plus:0.5.0
+    image: napcat-plus:0.5.1
     build:
       context: ..
       dockerfile: deploy/Dockerfile

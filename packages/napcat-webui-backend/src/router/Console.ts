@@ -5,7 +5,8 @@ import { sendError, sendSuccess } from '../utils/response';
 import { getGScoreRuntime } from '@/napcat-common/src/gscore/runtime';
 import { ConsoleCleaner } from '../helper/ConsoleCleaner';
 import { OB11PluginMangerAdapter } from '@/napcat-onebot/network/plugin-manger';
-const consoleVersion = '0.5.0';
+import { checkConsoleVersion, resolveConsoleVersion } from '../helper/ConsoleVersion';
+const consoleVersion = resolveConsoleVersion(process.env['NAPCAT_PLUS_VERSION'], '0.5.1');
 
 const router = Router();
 const runtime = () => {
@@ -36,6 +37,10 @@ router.get('/status', (_, res) => {
     if (preview) diagnostics.unshift({ level: 'warning', title: '6100 独立预览实例', detail: '此实例不共享6099的QQ数据。请勿登录正在6099使用的同一账号，以免挤下线；内置GSCore与生产旧插件不能同时桥接同一账号。' });
     return sendSuccess(res, { product: 'Napcat-Plus', version: consoleVersion, preview, uptime: Math.floor(process.uptime()), login, gscore, diagnostics });
   } catch { return sendError(res, '控制台状态尚未就绪'); }
+});
+
+router.get('/update/check', async (_, res) => {
+  return sendSuccess(res, await checkConsoleVersion(consoleVersion));
 });
 
 router.get('/gscore', (_, res) => {

@@ -1,0 +1,21 @@
+[Unit]
+Description=Restricted NapCat Docker updater
+Requires=napcat-docker-updater.socket
+After=docker.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/usr/bin/python3 /usr/local/libexec/napcat-docker-updater/updater.py
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+StateDirectory=napcat-docker-updater
+StateDirectoryMode=0700
+# compose.json and policy.json must reside in this root-owned directory.
+# Updater only writes the fixed compose.json; administrators maintain policy.json.
+ReadWritePaths=/var/lib/napcat-docker-updater /etc/napcat-docker-updater
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6

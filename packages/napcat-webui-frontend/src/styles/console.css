@@ -62,6 +62,13 @@
 .console-stat-heading svg { color: var(--console-accent); width: 17px; height: 17px; }
 .console-stat-value { font-size: 23px; font-weight: 750; letter-spacing: -.03em; line-height: 1.4; word-break: break-word; }
 .console-stat-foot { color: var(--console-muted); font-size: 10px; margin-top: 10px; line-height: 1.7; }
+.console-version-card { display: flex; flex-direction: column; }
+.console-version-values { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 8px; }
+.console-version-alert { display: block; color: var(--console-accent); font-size: 11px; font-weight: 700; text-align: right; }
+.console-version-latest { display: flex; flex-direction: column; align-items: flex-end; min-width: 0; color: var(--console-muted); font-size: 10px; overflow-wrap: anywhere; }
+.console-version-latest strong { color: var(--console-text); font-size: 14px; }
+.console-version-foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 8px; margin-top: auto; padding-top: 10px; }
+.console-version-foot [role='status'] { margin-left: auto; text-align: right; }
 .console-content-grid { display: grid; grid-template-columns: minmax(0,1.55fr) minmax(0,1fr); gap: 20px; }
 .console-status { display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px; font-size: 10px; font-weight: 650; border-radius: 6px; white-space: nowrap; background: var(--console-muted-surface); color: var(--console-muted); }
 .console-status > span { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }

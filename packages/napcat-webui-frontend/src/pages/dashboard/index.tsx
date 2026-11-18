@@ -1,5 +1,6 @@
 import { Button } from '@heroui/button';
-import { LuActivity, LuArrowUpRight, LuBot, LuCable, LuClock3, LuFileText, LuFolderOpen, LuPackage, LuRefreshCw, LuServer, LuShieldCheck, LuTriangleAlert } from 'react-icons/lu';
+import { LuActivity, LuArrowUpRight, LuBot, LuCable, LuClock3, LuFileText, LuFolderOpen, LuPackage, LuRefreshCw, LuShieldCheck, LuTriangleAlert } from 'react-icons/lu';
+import { ConsoleVersionCard } from '@/components/console-update';
 import { Link } from 'react-router-dom';
 import { ApiError, ConsoleLoading, ConsolePageHeader, ConsolePanel, StatusBadge } from '@/components/console-ui';
 import useConsoleStatus from '@/hooks/use-console-status';
@@ -27,7 +28,7 @@ export default function DashboardIndexPage () {
       <div className='console-stat'><div className='console-stat-heading'><span>QQ 账号状态</span><LuBot /></div><div className='console-stat-value'>{current ? login.label : '—'}</div><div className='console-stat-foot'><StatusBadge tone={current ? login.tone : 'neutral'}>{current?.login.coreReady ? '核心服务就绪' : current ? '等待核心就绪' : '状态待获取'}</StatusBadge></div></div>
       <div className='console-stat'><div className='console-stat-heading'><span>GSCore 连接</span><LuCable /></div><div className='console-stat-value'>{current ? gs.label : '—'}</div><div className='console-stat-foot'>{current ? (current.gscore.enabled ? `本轮重试 ${current.gscore.reconnectAttempts} 次` : '在连接管理中配置并启用') : '等待真实连接状态'}</div></div>
       <div className='console-stat'><div className='console-stat-heading'><span>本次运行时长</span><LuClock3 /></div><div className='console-stat-value'>{formatUptime(current?.uptime)}</div><div className='console-stat-foot'>服务端进程运行时间 · 每 5 秒更新</div></div>
-      <div className='console-stat'><div className='console-stat-heading'><span>当前版本</span><LuServer /></div><div className='console-stat-value'>{current?.version || '—'}</div><div className='console-stat-foot'>Napcat-Plus · NapCat 核心</div></div>
+      <ConsoleVersionCard fallbackVersion={current?.version} />
     </div>
     <div className='console-content-grid'>
       <div className='flex flex-col gap-5'>

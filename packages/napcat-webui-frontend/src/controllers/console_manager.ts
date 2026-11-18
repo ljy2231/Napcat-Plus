@@ -8,6 +8,21 @@ export default class ConsoleManager {
     return data.data;
   }
 
+  static async checkUpdate () {
+    const { data } = await serverRequest.get<ServerResponse<unknown>>('/Console/update/check');
+    return data.data;
+  }
+
+  static async getDockerUpdateStatus () {
+    const { data } = await serverRequest.get<ServerResponse<unknown>>('/Console/docker-update/status');
+    return data.data;
+  }
+
+  static async startDockerUpdate () {
+    const { data } = await serverRequest.post<ServerResponse<unknown>>('/Console/docker-update/update', {});
+    return data.data;
+  }
+
   static async getGSCoreConfig () {
     const { data } = await serverRequest.get<ServerResponse<GSCoreConfig>>('/Console/gscore');
     return data.data;

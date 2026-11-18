@@ -21,12 +21,14 @@ import { PluginRouter } from './Plugin';
 import { MirrorRouter } from './Mirror';
 import { NapCatConfigRouter } from './NapCatConfig';
 import { ConsoleRouter } from './Console';
+import { DockerUpdaterRouter } from './DockerUpdater';
 
 const router: Router = Router();
 
 // 鉴权中间件
 router.use(auth);
 router.use('/Console', ConsoleRouter);
+router.use('/Console/docker-update', DockerUpdaterRouter);
 
 // router:测试用
 router.all('/test', (_, res) => {

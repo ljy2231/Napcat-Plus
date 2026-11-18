@@ -11,7 +11,7 @@ set -euo pipefail
 
 export NAPCAT_PLUS_MIRROR="${NAPCAT_PLUS_MIRROR:-hub.002230.xyz:44300}"
 
-IMAGE="${NAPCAT_PLUS_IMAGE:-ghcr.io/ljy2231/napcat-plus:v0.5.0}"
+IMAGE="${NAPCAT_PLUS_IMAGE:-ghcr.io/ljy2231/napcat-plus:v0.5.1}"
 # A mirror is a registry host that proxies the original registry path, so the
 # image reference is simply prefixed. Works with e.g. hub.002230.xyz:44300.
 if [[ -n "${NAPCAT_PLUS_MIRROR:-}" ]]; then

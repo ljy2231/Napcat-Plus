@@ -3,7 +3,7 @@
   "packageManager": "pnpm@9.15.9",
   "private": true,
   "type": "module",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "scripts": {
     "build:shell": "pnpm --filter napcat-shell run build || exit 1",
     "build:shell:dev": "pnpm --filter napcat-shell run build:dev || exit 1",

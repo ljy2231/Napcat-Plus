@@ -22,6 +22,8 @@ import { IoDocument, IoRocketSharp } from 'react-icons/io5';
 import CryptoJS from 'crypto-js';
 
 import { ConsoleBrand } from '@/components/console-ui';
+import { ConsoleUpdatePanel } from '@/components/console-update';
+import { DockerUpdatePanel } from '@/components/docker-update';
 import ConsoleManager from '@/controllers/console_manager';
 import QQManager from '@/controllers/qq_manager';
 import WebUIManager from '@/controllers/webui_manager';
@@ -212,7 +214,7 @@ export default function AboutPage () {
       <div className='flex flex-col gap-2'>
         <ConsoleBrand />
         <h1 className='text-2xl font-bold text-default-900 mt-3'>关于与版本</h1>
-        <div className='flex items-center gap-4 text-small text-default-500'>
+        <div className='flex flex-wrap items-center gap-4 text-small text-default-500'>
           <p>基于 NapCat 的独立增强控制台，非上游官方发行版</p>
           <Divider orientation='vertical' className='h-4' />
           <VersionInfo />
@@ -226,6 +228,8 @@ export default function AboutPage () {
 
         {/* 左侧：介绍与特性 */}
         <div className='lg:col-span-2 space-y-6'>
+          <ConsoleUpdatePanel />
+          <DockerUpdatePanel />
           <Card shadow='sm' className={cardStyle}>
             <CardHeader className='pb-0 pt-4 px-4 flex-col items-start'>
               <h2 className='text-lg font-bold'>项目简介</h2>

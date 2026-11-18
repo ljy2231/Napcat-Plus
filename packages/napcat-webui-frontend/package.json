@@ -9,7 +9,7 @@
     "build:full": "tsc && vite build",
     "fontmin": "node scripts/fontmin.cjs",
     "typecheck": "tsc --noEmit",
-    "test:console": "node --test scripts/console-helpers.test.mjs",
+    "test:console": "node --test scripts/console-helpers.test.mjs scripts/console-update.test.mjs scripts/docker-update.test.mjs",
     "lint": "eslint -c eslint.config.mjs ./src/**/**/*.{ts,tsx} --fix",
     "preview": "vite preview"
   },
