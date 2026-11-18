@@ -111,7 +111,7 @@ NAPCAT_PLUS_IMAGE=ghcr.io/ljy2231/napcat-plus:v0.5.0 \
 docker compose -f /opt/napcat-plus/compose.yaml down
 ```
 
-**完整删除不可恢复**：请先备份 `/opt/napcat-plus`，核对目录属于要卸载的实例，确认不再需要 QQ 登录数据、配置、插件和 Token 后再删除：
+删除数据目录
 
 ```bash
 ls -la /opt/napcat-plus
