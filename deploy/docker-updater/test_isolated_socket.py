@@ -104,6 +104,17 @@ class IsolatedSocketTests(unittest.TestCase):
         (self.state / 'committed.json').write_text(json.dumps({'generation': 1, 'image': BASE}))
         self.fake = FakeDocker(self.compose)
         self.finished = threading.Event()
+        original_lstat = Path.lstat
+
+        def socket_lstat(path, *args, **kwargs):
+            result = original_lstat(path, *args, **kwargs)
+            if path == Path(self.socket_path):
+                # Model systemd's root-owned socket without changing the real file.
+                fields = list(result)
+                fields[4] = 0  # st_uid; retain the real type, mode and gid
+                return os.stat_result(fields)
+            return result
+
         self.patches = [
             mock.patch.object(u, 'STATE', self.state),
             mock.patch.object(u, 'POLICY', self.policy),
@@ -112,6 +123,7 @@ class IsolatedSocketTests(unittest.TestCase):
             mock.patch.object(u, 'SOCKET_DIR', self.root),
             mock.patch.object(u, 'SOCKET', self.socket_path),
             mock.patch.object(u.grp, 'getgrnam', return_value=SimpleNamespace(gr_gid=os.getgid())),
+            mock.patch.object(Path, 'lstat', socket_lstat),
             # TemporaryDirectory is under /tmp, whose ownership/mode do not meet
             # production policy. This mock is not a permissions test.
             mock.patch.object(u, 'trusted_path', side_effect=self.assert_temp_path),

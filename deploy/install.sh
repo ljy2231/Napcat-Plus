@@ -4,7 +4,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/ljy2231/Napcat-Plus/main/deploy/install.sh | bash
 #
 # Environment overrides:
-#   NAPCAT_PLUS_IMAGE  image reference (default ghcr.io/ljy2231/napcat-plus:v0.5.1)
+#   NAPCAT_PLUS_IMAGE  image reference (default ghcr.io/ljy2231/napcat-plus:v0.5.2)
 #   NAPCAT_PLUS_MIRROR registry/mirror prefix, e.g. hub.002230.xyz:44300 (China加速)
 #   NAPCAT_PLUS_DIR    install directory (default /opt/napcat-plus)
 #   NAPCAT_PLUS_PORT   host port for the WebUI (default 6099)
@@ -12,7 +12,7 @@
 #   NAPCAT_PLUS_TOKEN  existing WebUI token to reuse instead of generating one
 set -euo pipefail
 
-IMAGE="${NAPCAT_PLUS_IMAGE:-ghcr.io/ljy2231/napcat-plus:v0.5.1}"
+IMAGE="${NAPCAT_PLUS_IMAGE:-ghcr.io/ljy2231/napcat-plus:v0.5.2}"
 # A mirror is a registry host that proxies the original registry path, so the
 # image reference is simply prefixed. Works with e.g. hub.002230.xyz:44300.
 if [[ -n "${NAPCAT_PLUS_MIRROR:-}" ]]; then

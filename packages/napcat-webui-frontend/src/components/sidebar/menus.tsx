@@ -26,7 +26,7 @@ function MenuEntry ({ item, onNavigate }: { item: MenuItem; onNavigate?: () => v
 export default function Menus ({ items, onNavigate }: { items: MenuItem[]; onNavigate?: () => void; }) {
   return <nav aria-label='主导航' className='console-navigation'>
     {items.map((item, index) => <div key={item.href || item.label}>
-      {(index === 0 || index === 3 || index === 10) && <div className='console-nav-section'>{index === 0 ? '工作空间' : index === 3 ? '连接与工具' : '系统管理'}</div>}
+      {(index === 0 || index === 3 || index === 11) && <div className='console-nav-section'>{index === 0 ? '工作空间' : index === 3 ? '连接与工具' : '系统管理'}</div>}
       <MenuEntry item={item} onNavigate={onNavigate} />
     </div>)}
   </nav>;

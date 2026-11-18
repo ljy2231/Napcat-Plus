@@ -2,6 +2,7 @@ import contextlib
 import importlib.util
 import io
 import json
+import os
 import socket
 import subprocess
 import tempfile
@@ -248,11 +249,21 @@ class PolicyTests(unittest.TestCase):
         self.volumes = [f'{self.data / n}:{target}' for n, target in u.MOUNTS.items()]
         self.volumes.append(f'{self.socket_dir}:{u.SOCKET_TARGET}:ro')
 
-    def load(self, volumes, extra=None):
+    def load(self, volumes, extra=None, socket_uid=0):
         service = {'image': BASE, 'healthcheck': {'test': ['CMD', 'true']}, 'volumes': volumes}
         service.update(extra or {})
         self.compose_path.write_text(json.dumps({'services': {'web': service}}))
-        with mock.patch.object(u, 'POLICY', self.policy), mock.patch.object(u, 'DATA_ROOT', self.data), mock.patch.object(u, 'COMPOSE_FILE', self.compose_path), mock.patch.object(u, 'SOCKET_DIR', self.socket_dir), mock.patch.object(u, 'SOCKET', str(self.socket_path)), mock.patch.object(u, 'trusted_path'), mock.patch.object(u.grp, 'getgrnam', return_value=mock.Mock(gr_gid=self.socket_path.stat().st_gid)):
+        original_lstat = Path.lstat
+
+        def socket_lstat(path, *args, **kwargs):
+            result = original_lstat(path, *args, **kwargs)
+            if path == self.socket_path and socket_uid is not None:
+                fields = list(result)
+                fields[4] = socket_uid  # st_uid; retain the real type, mode and gid
+                return os.stat_result(fields)
+            return result
+
+        with mock.patch.object(u, 'POLICY', self.policy), mock.patch.object(u, 'DATA_ROOT', self.data), mock.patch.object(u, 'COMPOSE_FILE', self.compose_path), mock.patch.object(u, 'SOCKET_DIR', self.socket_dir), mock.patch.object(u, 'SOCKET', str(self.socket_path)), mock.patch.object(u, 'trusted_path'), mock.patch.object(u.grp, 'getgrnam', return_value=mock.Mock(gr_gid=self.socket_path.stat().st_gid)), mock.patch.object(Path, 'lstat', socket_lstat):
             return u.load_policy()
 
     def test_exact_dedicated_mounts_only(self):
@@ -291,6 +302,17 @@ class PolicyTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.load(self.volumes)
 
+    def test_socket_non_root_owner_rejected(self):
+        # Exercise the real policy check with every other socket attribute valid.
+        with self.assertRaisesRegex(ValueError, 'unsafe updater socket ownership or permissions'):
+            self.load(self.volumes, socket_uid=12345)
+
+    @unittest.skipIf(os.geteuid() == 0, 'requires a real non-root socket owner')
+    def test_real_non_root_socket_owner_rejected(self):
+        self.assertNotEqual(self.socket_path.lstat().st_uid, 0)
+        with self.assertRaisesRegex(ValueError, 'unsafe updater socket ownership or permissions'):
+            self.load(self.volumes, socket_uid=None)
+
     def test_arbitrary_compose_path_rejected(self):
         self.compose_path.write_text(json.dumps({'services': {'web': {'image': BASE, 'healthcheck': {'test': ['CMD', 'true']}, 'volumes': self.volumes}}}))
         with mock.patch.object(u, 'POLICY', self.policy), mock.patch.object(u, 'COMPOSE_FILE', self.root / 'other.json'), mock.patch.object(u, 'trusted_path'):
@@ -317,6 +339,9 @@ class ServerTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.sockpath = str(Path(self.temp.name) / 'server.sock')
+        state_patch = mock.patch.object(u, 'STATE', Path(self.temp.name))
+        state_patch.start()
+        self.addCleanup(state_patch.stop)
         class SmallServer(u.Server):
             max_clients = 2
             request_deadline = 0.3

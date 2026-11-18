@@ -7,13 +7,13 @@ WORKDIR /src
 RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 COPY . .
 RUN pnpm install --frozen-lockfile --ignore-scripts
-ARG CONSOLE_VERSION=0.5.1
+ARG CONSOLE_VERSION=0.5.2
 ENV NAPCAT_VERSION=4.18.42+napcat-plus.${CONSOLE_VERSION}
 RUN pnpm run typecheck && pnpm --filter napcat-test exec vitest run
 RUN pnpm run build:webui && pnpm run build:shell && pnpm run build:plugin-builtin
 
 FROM ${QQ_RUNTIME}
-ARG CONSOLE_VERSION=0.5.1
+ARG CONSOLE_VERSION=0.5.2
 LABEL org.opencontainers.image.title="Napcat-Plus" \
       org.opencontainers.image.source="https://github.com/ljy2231/Napcat-Plus"
 COPY --from=build /src/packages/napcat-shell/dist/ /app/napcat/

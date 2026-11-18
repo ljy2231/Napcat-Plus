@@ -4,6 +4,7 @@ import {
   LuFolderOpen,
   LuInfo,
   LuLayoutDashboard,
+  LuLogIn,
   LuSettings,
   LuSignal,
   LuTerminal,
@@ -43,6 +44,11 @@ export const siteConfig = {
       label: '内置工具',
       icon: <LuWrench className='w-5 h-5' />,
       href: '/tools',
+    },
+    {
+      label: 'QQ 登录',
+      icon: <LuLogIn className='w-5 h-5' />,
+      href: '/qq_login',
     },
     {
       label: 'OneBot 连接',

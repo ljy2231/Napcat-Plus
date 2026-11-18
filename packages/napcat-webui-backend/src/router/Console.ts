@@ -6,7 +6,7 @@ import { getGScoreRuntime } from '@/napcat-common/src/gscore/runtime';
 import { ConsoleCleaner } from '../helper/ConsoleCleaner';
 import { OB11PluginMangerAdapter } from '@/napcat-onebot/network/plugin-manger';
 import { checkConsoleVersion, resolveConsoleVersion } from '../helper/ConsoleVersion';
-const consoleVersion = resolveConsoleVersion(process.env['NAPCAT_PLUS_VERSION'], '0.5.1');
+const consoleVersion = resolveConsoleVersion(process.env['NAPCAT_PLUS_VERSION'], '0.5.2');
 
 const router = Router();
 const runtime = () => {

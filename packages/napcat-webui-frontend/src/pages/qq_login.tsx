@@ -47,6 +47,10 @@ export default function QQLoginPage () {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [qrcode, setQrcode] = useState<string>('');
   const [loginPhase, setLoginPhase] = useState<string>('waiting_qrcode');
+  const [loginStatus, setLoginStatus] = useState<{ isLogin: boolean; isOffline: boolean; coreReady: boolean; } | null>(null);
+  // 只有成功取得过未登录状态，后续变为已登录才视为本页面完成了登录。
+  const previousLoginRef = useRef<boolean | null>(null);
+  const loginTransitionHandledRef = useRef(false);
   const [isRecoveringLoginService, setIsRecoveringLoginService] = useState(false);
   const qrcodeRef = useRef<string>('');
   const qrcodeRequestVersionRef = useRef(0);
@@ -207,14 +211,22 @@ export default function QQLoginPage () {
       const data = await QQManager.checkQQLoginStatusWithQrcode();
       setStatusError('');
       setLoginPhase(data.loginPhase || (data.isLogin ? 'ready' : 'waiting_qrcode'));
+      setLoginStatus({ isLogin: data.isLogin, isOffline: data.isOffline ?? false, coreReady: !data.isOffline && data.coreReady === true });
       if (data.loginPhase === 'reconnecting') {
         setIsRecoveringLoginService(true);
       }
 
       if (data.isLogin) {
-        toast.success('QQ登录成功');
-        navigate('/', { replace: true });
+        setIsRecoveringLoginService(false);
+        setLoginError('');
+        lastErrorRef.current = '';
+        if (previousLoginRef.current === false && !loginTransitionHandledRef.current) {
+          loginTransitionHandledRef.current = true;
+          toast.success('QQ登录成功');
+          navigate('/', { replace: true });
+        }
       } else {
+        loginTransitionHandledRef.current = false;
         // 刷新二维码是一个需要等待结果的操作。忽略在它开始前发出的
         // 轮询响应，避免旧 URL 在刷新完成后覆盖刚拿到的新二维码。
         if (requestVersion === qrcodeRequestVersionRef.current && !isRefreshingQRCodeRef.current) {
@@ -233,6 +245,7 @@ export default function QQLoginPage () {
           setLoginError('');
         }
       }
+      previousLoginRef.current = data.isLogin;
     } catch (error) {
       const msg = (error as Error).message;
       // Worker 重启时，旧连接被关闭是预期现象。恢复状态持续轮询即可，
@@ -339,8 +352,8 @@ export default function QQLoginPage () {
     return () => clearTimeout(timer);
   }, [isRecoveringLoginService]);
 
-  const presentation = loginPresentation({ isLogin: false, isOffline: loginPhase === 'offline', loginPhase, coreReady: false, loginError: parseLoginError(loginError) });
-  const phaseIndex = loginPhase === 'initializing' ? 2 : loginPhase === 'qrcode_scanned' ? 1 : 0;
+  const presentation = loginPresentation(loginStatus ? { ...loginStatus, loginPhase, loginError: parseLoginError(loginError) } : undefined);
+  const phaseIndex = loginStatus?.isLogin || loginPhase === 'initializing' ? 2 : loginPhase === 'qrcode_scanned' ? 1 : 0;
 
   return (
     <>
@@ -354,7 +367,9 @@ export default function QQLoginPage () {
                 <div className='flex justify-between items-center gap-3 mb-3'><h2 className='!mb-0'>{statusError ? '状态暂不可用' : presentation.label}</h2><StatusBadge tone={statusError ? 'danger' : presentation.tone}>{statusError ? '连接中断' : '实时登录状态'}</StatusBadge></div>
                 <p>{statusError || presentation.detail}</p>
               </div>
-              <Tabs fullWidth aria-label='QQ 登录方式' isDisabled={isLoading} size='md' selectedKey={activeTab} onSelectionChange={(key) => key !== null && setActiveTab(key.toString())} classNames={{ panel: 'pt-6' }}>
+              {loginStatus?.isLogin ? (
+                <div role='status' className='console-form-note'>{loginStatus.isOffline ? 'QQ 当前已离线，请检查连接状态。' : loginStatus.coreReady ? 'QQ 已登录，无需再次登录。可返回控制台继续管理。' : 'QQ 登录状态已确认，正在等待核心服务就绪。'}</div>
+              ) : <Tabs fullWidth aria-label='QQ 登录方式' isDisabled={isLoading} size='md' selectedKey={activeTab} onSelectionChange={(key) => key !== null && setActiveTab(key.toString())} classNames={{ panel: 'pt-6' }}>
                 <Tab key='qrcode' title='扫码登录'>
                   <QrCodeLogin loginError={statusError || parseLoginError(loginError)} qrcode={statusError ? '' : qrcode} onRefresh={onRefreshQRCode} isRefreshing={isRefreshingQRCode} loginPhase={loginPhase} isRecoveringLoginService={isRecoveringLoginService} />
                 </Tab>
@@ -364,7 +379,7 @@ export default function QQLoginPage () {
                 <Tab key='password' title='密码登录'>
                   <PasswordLogin isLoading={isLoading} onSubmit={onPasswordSubmit} onCaptchaSubmit={onCaptchaSubmit} onNewDeviceVerified={onNewDeviceVerified} qqList={qqList} captchaState={captchaState} captchaVerifying={captchaVerifying} newDeviceState={newDeviceState} onCaptchaCancel={onCaptchaCancel} onNewDeviceCancel={onNewDeviceCancel} />
                 </Tab>
-              </Tabs>
+              </Tabs>}
             </ConsolePanel>
             <div className='flex flex-col gap-5'>
               <ConsolePanel title='登录进度' description='此处跟随真实登录阶段更新。'>
