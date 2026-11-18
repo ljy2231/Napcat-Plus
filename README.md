@@ -92,12 +92,6 @@ docker compose up -d
 curl -fsSL https://hub.002230.xyz:44300/https://raw.githubusercontent.com/ljy2231/Napcat-Plus/main/deploy/install-cn.sh | bash
 ```
 
-### 手动 docker run 装的
-
-```bash
-docker rm -f napcat-plus   # 数据在宿主机目录里，不会丢
-# 然后用「快速开始」里的 docker run 命令重新启动即可
-```
 
 ### 指定版本
 
@@ -108,12 +102,6 @@ NAPCAT_PLUS_IMAGE=ghcr.io/ljy2231/napcat-plus:v0.5.0 \
 
 安装脚本默认固定版本标签；执行 `docker compose pull` 只会拉取当前配置中同一标签的最新内容，不会自动切换到新版本号。升级到其他版本时请显式设置 `NAPCAT_PLUS_IMAGE` 或调整 Compose 镜像引用。
 
-### 升级前
-
-- 备份数据目录（`qq/`、`config/`、`plugins/`）以及 `config/onebot11.json`、`config/napcat.json`
-- 不要用 `docker compose down -v`
-- 升级只换镜像，账号数据、登录态、插件配置都在宿主机绑定目录里保留
-- 升级后浏览器可能仍持有旧资源，按一次 `Ctrl + F5`
 
 ## 卸载
 
