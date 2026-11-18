@@ -22,12 +22,6 @@ curl -fsSL https://raw.githubusercontent.com/ljy2231/Napcat-Plus/main/deploy/ins
 
 脚本会自动生成 WebUI Token、建好数据目录、拉镜像并启动容器，最后打印访问地址和 Token。默认安装目录为 `/opt/napcat-plus`，端口为 `6099`。重复执行保留已有数据和 Token，但会重新生成 Compose 文件，手工修改的 Compose 配置会被覆盖。
 
-换端口 / 换目录 / 换版本（脚本使用固定项目名和容器名，不能仅靠换目录或端口同时运行两套）：
-
-```bash
-NAPCAT_PLUS_PORT=6100 NAPCAT_PLUS_DIR=/opt/my-napcat-plus \
-  bash -c "$(curl -fsSL https://raw.githubusercontent.com/ljy2231/Napcat-Plus/main/deploy/install.sh)"
-```
 
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
@@ -46,7 +40,7 @@ NAPCAT_PLUS_PORT=6100 NAPCAT_PLUS_DIR=/opt/my-napcat-plus \
 | `hub.002230.xyz:44300/ghcr.io/ljy2231/napcat-plus:latest` | 同一镜像的国内加速路径，摘要一致 |
 | `ghcr.io/ljy2231/napcat-plus-base:qq-3.2.34-53644` | 固定 QQ 运行时；上游 `mlikiowa/napcat-docker` 已随删库消失，此镜像为复刻 |
 
-**不用脚本的纯 docker 一行**（适合临时试用，Token 会打印在日志里）：
+**手动部署**（Token 会打印在日志里）：
 
 ```bash
 docker run -d --name napcat-plus --restart unless-stopped -p 6099:6099 \
