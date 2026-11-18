@@ -22,7 +22,7 @@ curl -fsSL https://raw.githubusercontent.com/ljy2231/Napcat-Plus/main/deploy/ins
 
 脚本会自动生成 WebUI Token、建好数据目录、拉镜像并启动容器，最后打印访问地址和 Token。默认安装目录为 `/opt/napcat-plus`，端口为 `6099`。重复执行保留已有数据和 Token，但会重新生成 Compose 文件，手工修改的 Compose 配置会被覆盖。
 
-换端口 / 换目录 / 换版本：
+换端口 / 换目录 / 换版本（脚本使用固定项目名和容器名，不能仅靠换目录或端口同时运行两套）：
 
 ```bash
 NAPCAT_PLUS_PORT=6100 NAPCAT_PLUS_DIR=/opt/my-napcat-plus \
@@ -34,15 +34,15 @@ NAPCAT_PLUS_PORT=6100 NAPCAT_PLUS_DIR=/opt/my-napcat-plus \
 | `NAPCAT_PLUS_PORT` | `6099` | 宿主端口 |
 | `NAPCAT_PLUS_DIR` | `/opt/napcat-plus` | 安装目录，需要有写入权限 |
 | `NAPCAT_PLUS_BIND` | `0.0.0.0` | 监听地址，反代后面可设 `127.0.0.1` |
-| `NAPCAT_PLUS_IMAGE` | GHCR `v0.4.0-preview.1` | 指定镜像版本，也可明确选择 `:latest` 稳定版 |
+| `NAPCAT_PLUS_IMAGE` | GHCR `v0.5.0` | 指定镜像版本，也可明确选择 `:latest` |
 | `NAPCAT_PLUS_MIRROR` | 空 | 镜像源前缀；`install-cn.sh` 已内置 `hub.002230.xyz:44300` |
 
 镜像地址：
 
 | 镜像 | 说明 |
 | --- | --- |
+| `ghcr.io/ljy2231/napcat-plus:latest` / `:v0.5.0` | 0.5.0 正式版，约 2.4 GB |
 | `ghcr.io/ljy2231/napcat-plus:v0.4.0-preview.1` | 0.4.0 预览版，约 2.4 GB |
-| `ghcr.io/ljy2231/napcat-plus:latest` / `:v0.3.0` | 0.3.0 正式版，约 2.4 GB |
 | `hub.002230.xyz:44300/ghcr.io/ljy2231/napcat-plus:latest` | 同一镜像的国内加速路径，摘要一致 |
 | `ghcr.io/ljy2231/napcat-plus-base:qq-3.2.34-53644` | 固定 QQ 运行时；上游 `mlikiowa/napcat-docker` 已随删库消失，此镜像为复刻 |
 
@@ -54,11 +54,11 @@ docker run -d --name napcat-plus --restart unless-stopped -p 6099:6099 \
   -v "/opt/napcat-plus/qq:/app/.config/QQ" \
   -v "/opt/napcat-plus/config:/app/napcat/config" \
   -v "/opt/napcat-plus/plugins:/app/napcat/plugins" \
-  ghcr.io/ljy2231/napcat-plus:v0.4.0-preview.1
+  ghcr.io/ljy2231/napcat-plus:v0.5.0
 docker logs -f napcat-plus   # 查看 WebUI 地址与 Token
 ```
 
-### 从源码构建（自定义/离线）
+### 从源码构建（自定义）
 
 ```bash
 cp deploy/.env.example deploy/.env
@@ -112,9 +112,11 @@ docker rm -f napcat-plus   # 数据在宿主机目录里，不会丢
 ### 指定版本
 
 ```bash
-NAPCAT_PLUS_IMAGE=ghcr.io/ljy2231/napcat-plus:v0.3.0 \
+NAPCAT_PLUS_IMAGE=ghcr.io/ljy2231/napcat-plus:v0.5.0 \
   bash -c "$(curl -fsSL https://raw.githubusercontent.com/ljy2231/Napcat-Plus/main/deploy/install.sh)"
 ```
+
+安装脚本默认固定版本标签；执行 `docker compose pull` 只会拉取当前配置中同一标签的最新内容，不会自动切换到新版本号。升级到其他版本时请显式设置 `NAPCAT_PLUS_IMAGE` 或调整 Compose 镜像引用。
 
 ### 升级前
 

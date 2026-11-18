@@ -11,7 +11,7 @@ set -euo pipefail
 
 export NAPCAT_PLUS_MIRROR="${NAPCAT_PLUS_MIRROR:-hub.002230.xyz:44300}"
 
-IMAGE="${NAPCAT_PLUS_IMAGE:-ghcr.io/ljy2231/napcat-plus:v0.4.0-preview.1}"
+IMAGE="${NAPCAT_PLUS_IMAGE:-ghcr.io/ljy2231/napcat-plus:v0.5.0}"
 # A mirror is a registry host that proxies the original registry path, so the
 # image reference is simply prefixed. Works with e.g. hub.002230.xyz:44300.
 if [[ -n "${NAPCAT_PLUS_MIRROR:-}" ]]; then
@@ -23,6 +23,43 @@ BIND="${NAPCAT_PLUS_BIND:-0.0.0.0}"
 
 say() { printf '%s\n' "$*"; }
 fail() { printf '错误: %s\n' "$*" >&2; exit 1; }
+
+# Only accept literal values that Compose will not interpolate or reinterpret.
+valid_token() { local LC_ALL=C; [[ "$1" =~ ^[a-zA-Z0-9_./:@+=-]+$ ]]; }
+valid_tz() { local LC_ALL=C; [[ "$1" =~ ^[a-zA-Z0-9_./:+-]+$ ]]; }
+
+read_existing_env() {
+  local LC_ALL=C line value key seen_token=0 seen_tz=0
+  local assignment_re='^[[:space:]]*(export[[:space:]]+)?(WEBUI_TOKEN|TZ)[[:space:]]*=(.*)$'
+  local bare_re='^([a-zA-Z0-9_./:@+=-]+)([[:space:]]+(#.*)?)?$'
+  local single_re="^'([a-zA-Z0-9_./:@+=-]+)'[[:space:]]*(#.*)?$"
+  local double_re='^"([a-zA-Z0-9_./:@+=-]+)"[[:space:]]*(#.*)?$'
+  WEBUI_TOKEN=''
+  ENV_TZ=''
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%$'\r'}"
+    [[ "$line" =~ $assignment_re ]] || continue
+    key="${BASH_REMATCH[2]}"
+    value="${BASH_REMATCH[3]}"
+    value="${value#"${value%%[![:space:]]*}"}"
+    if [[ "$value" =~ $bare_re || "$value" =~ $single_re || "$value" =~ $double_re ]]; then
+      value="${BASH_REMATCH[1]}"
+    else
+      fail "$ENV_FILE 中 $key 不是支持的安全字面值；请检查配置。"
+    fi
+    case "$key" in
+      WEBUI_TOKEN)
+        (( seen_token == 0 )) || fail "$ENV_FILE 中 WEBUI_TOKEN 重复。"
+        valid_token "$value" || fail "$ENV_FILE 中 WEBUI_TOKEN 无效。"
+        WEBUI_TOKEN="$value"; seen_token=1 ;;
+      TZ)
+        (( seen_tz == 0 )) || fail "$ENV_FILE 中 TZ 重复。"
+        valid_tz "$value" || fail "$ENV_FILE 中 TZ 无效。"
+        ENV_TZ="$value"; seen_tz=1 ;;
+    esac
+  done < "$ENV_FILE"
+  (( seen_token == 1 )) || fail "$ENV_FILE 中缺少 WEBUI_TOKEN。"
+}
 
 say "=== Napcat-Plus 一键安装 ==="
 
@@ -54,18 +91,20 @@ cd "$DIR"
 ENV_FILE="$DIR/.env"
 if [[ -f "$ENV_FILE" ]]; then
   say "检测到已有配置，沿用 $ENV_FILE（不会覆盖 Token 或数据）。"
-  # shellcheck disable=SC1090
-  set -a; . "$ENV_FILE"; set +a
+  read_existing_env
 else
   if [[ -n "${NAPCAT_PLUS_TOKEN:-}" ]]; then
-    TOKEN="$NAPCAT_PLUS_TOKEN"
+    WEBUI_TOKEN="$NAPCAT_PLUS_TOKEN"
   else
-    TOKEN="$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+    WEBUI_TOKEN="$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
   fi
+  ENV_TZ="${TZ:-Asia/Shanghai}"
+  valid_token "$WEBUI_TOKEN" || fail "NAPCAT_PLUS_TOKEN 无效：仅支持字母、数字及 _ . / : @ + = -。"
+  valid_tz "$ENV_TZ" || fail "TZ 无效：仅支持字母、数字及 _ . / : + -。"
   umask 077
   cat > "$ENV_FILE" <<EOF
-WEBUI_TOKEN=${TOKEN}
-TZ=${TZ:-Asia/Shanghai}
+WEBUI_TOKEN=${WEBUI_TOKEN}
+TZ=${ENV_TZ}
 EOF
   chmod 600 "$ENV_FILE"
   say "已生成 WebUI 管理 Token 并写入 $ENV_FILE（权限 600）。"
@@ -115,7 +154,6 @@ for _ in $(seq 1 60); do
   sleep 2
 done
 
-set -a; . "$ENV_FILE"; set +a
 IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
 [[ -n "$IP" ]] || IP="<服务器IP>"
 

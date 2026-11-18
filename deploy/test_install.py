@@ -111,7 +111,7 @@ class InstallerTests(unittest.TestCase):
                 self.assertRegex(env_text, r"\AWEBUI_TOKEN=[0-9a-f]{48}\nTZ=Asia/Shanghai\n\Z")
                 self.assertEqual(stat.S_IMODE((path / ".env").stat().st_mode), 0o600)
                 prefix = "hub.002230.xyz:44300/" if script.name == "install-cn.sh" else ""
-                self.assertIn(f"image: {prefix}ghcr.io/ljy2231/napcat-plus:v0.4.0-preview.1", (path / "compose.yaml").read_text())
+                self.assertIn(f"image: {prefix}ghcr.io/ljy2231/napcat-plus:v0.5.0", (path / "compose.yaml").read_text())
                 self.assertIn(["docker", "compose", "-f", str(path / "compose.yaml"), "pull"], calls)
                 self.assertIn(f"数据目录 : {path}/", result.stdout)
 
