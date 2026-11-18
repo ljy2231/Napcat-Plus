@@ -6,18 +6,18 @@
 # 可选覆盖（一般不用管）：
 #   NAPCAT_PLUS_MIRROR=hub.002230.xyz:44300
 #   NAPCAT_PLUS_PORT=6099
-#   NAPCAT_PLUS_DIR=$HOME/napcat-plus
+#   NAPCAT_PLUS_DIR=/opt/napcat-plus
 set -euo pipefail
 
 export NAPCAT_PLUS_MIRROR="${NAPCAT_PLUS_MIRROR:-hub.002230.xyz:44300}"
 
-IMAGE="${NAPCAT_PLUS_IMAGE:-ghcr.io/ljy2231/napcat-plus:latest}"
+IMAGE="${NAPCAT_PLUS_IMAGE:-ghcr.io/ljy2231/napcat-plus:v0.4.0-preview.1}"
 # A mirror is a registry host that proxies the original registry path, so the
 # image reference is simply prefixed. Works with e.g. hub.002230.xyz:44300.
 if [[ -n "${NAPCAT_PLUS_MIRROR:-}" ]]; then
   IMAGE="${NAPCAT_PLUS_MIRROR%/}/${IMAGE}"
 fi
-DIR="${NAPCAT_PLUS_DIR:-$HOME/napcat-plus}"
+DIR="${NAPCAT_PLUS_DIR:-/opt/napcat-plus}"
 PORT="${NAPCAT_PLUS_PORT:-6099}"
 BIND="${NAPCAT_PLUS_BIND:-0.0.0.0}"
 
@@ -45,6 +45,9 @@ if ss -ltn 2>/dev/null | awk '{print $4}' | grep -qE "[:.]${PORT}$"; then
 fi
 
 # --- layout ------------------------------------------------------------------
+umask 077
+mkdir -p "$DIR" || fail "无法创建安装目录 $DIR；请用 root 运行或先授予目录写权限。"
+DIR="$(cd "$DIR" && pwd -P)"
 mkdir -p "$DIR/qq" "$DIR/config" "$DIR/plugins"
 cd "$DIR"
 

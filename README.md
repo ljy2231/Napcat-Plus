@@ -6,7 +6,7 @@
 
 ## 快速开始
 
-一行命令，复制粘贴就能跑（Linux amd64，需要已装 Docker）。
+一行命令，复制粘贴就能跑（Linux amd64，需要已安装 Docker 和 Docker Compose，并有 Docker 及 `/opt/napcat-plus` 的写入权限；通常使用 root 执行）。
 
 **国内加速下载(已内置加速站)：**
 
@@ -20,28 +20,29 @@ curl -fsSL https://hub.002230.xyz:44300/https://raw.githubusercontent.com/ljy223
 curl -fsSL https://raw.githubusercontent.com/ljy2231/Napcat-Plus/main/deploy/install.sh | bash
 ```
 
-脚本会自动生成 WebUI Token、建好数据目录、拉镜像、启动容器并等健康检查，最后打印访问地址和 Token。默认装在 `~/napcat-plus`，端口 `6099`。重复执行不会覆盖已有数据或 Token。
+脚本会自动生成 WebUI Token、建好数据目录、拉镜像并启动容器，最后打印访问地址和 Token。默认安装目录为 `/opt/napcat-plus`，端口为 `6099`。重复执行保留已有数据和 Token，但会重新生成 Compose 文件，手工修改的 Compose 配置会被覆盖。
 
 换端口 / 换目录 / 换版本：
 
 ```bash
-NAPCAT_PLUS_PORT=6100 NAPCAT_PLUS_DIR=/opt/napcat-plus \
+NAPCAT_PLUS_PORT=6100 NAPCAT_PLUS_DIR=/opt/my-napcat-plus \
   bash -c "$(curl -fsSL https://raw.githubusercontent.com/ljy2231/Napcat-Plus/main/deploy/install.sh)"
 ```
 
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
 | `NAPCAT_PLUS_PORT` | `6099` | 宿主端口 |
-| `NAPCAT_PLUS_DIR` | `$HOME/napcat-plus` | 安装目录 |
+| `NAPCAT_PLUS_DIR` | `/opt/napcat-plus` | 安装目录，需要有写入权限 |
 | `NAPCAT_PLUS_BIND` | `0.0.0.0` | 监听地址，反代后面可设 `127.0.0.1` |
-| `NAPCAT_PLUS_IMAGE` | GHCR `latest` | 指定版本，如 `:v0.3.0` |
+| `NAPCAT_PLUS_IMAGE` | GHCR `v0.4.0-preview.1` | 指定镜像版本，也可明确选择 `:latest` 稳定版 |
 | `NAPCAT_PLUS_MIRROR` | 空 | 镜像源前缀；`install-cn.sh` 已内置 `hub.002230.xyz:44300` |
 
 镜像地址：
 
 | 镜像 | 说明 |
 | --- | --- |
-| `ghcr.io/ljy2231/napcat-plus:latest` / `:v0.3.0` | 应用镜像，约 2.4 GB |
+| `ghcr.io/ljy2231/napcat-plus:v0.4.0-preview.1` | 0.4.0 预览版，约 2.4 GB |
+| `ghcr.io/ljy2231/napcat-plus:latest` / `:v0.3.0` | 0.3.0 正式版，约 2.4 GB |
 | `hub.002230.xyz:44300/ghcr.io/ljy2231/napcat-plus:latest` | 同一镜像的国内加速路径，摘要一致 |
 | `ghcr.io/ljy2231/napcat-plus-base:qq-3.2.34-53644` | 固定 QQ 运行时；上游 `mlikiowa/napcat-docker` 已随删库消失，此镜像为复刻 |
 
@@ -50,10 +51,10 @@ NAPCAT_PLUS_PORT=6100 NAPCAT_PLUS_DIR=/opt/napcat-plus \
 ```bash
 docker run -d --name napcat-plus --restart unless-stopped -p 6099:6099 \
   -e WEBUI_TOKEN=$(openssl rand -hex 24) \
-  -v "$HOME/napcat-plus/qq:/app/.config/QQ" \
-  -v "$HOME/napcat-plus/config:/app/napcat/config" \
-  -v "$HOME/napcat-plus/plugins:/app/napcat/plugins" \
-  ghcr.io/ljy2231/napcat-plus:latest
+  -v "/opt/napcat-plus/qq:/app/.config/QQ" \
+  -v "/opt/napcat-plus/config:/app/napcat/config" \
+  -v "/opt/napcat-plus/plugins:/app/napcat/plugins" \
+  ghcr.io/ljy2231/napcat-plus:v0.4.0-preview.1
 docker logs -f napcat-plus   # 查看 WebUI 地址与 Token
 ```
 
@@ -62,8 +63,11 @@ docker logs -f napcat-plus   # 查看 WebUI 地址与 Token
 ```bash
 cp deploy/.env.example deploy/.env
 # 编辑 deploy/.env，将 WEBUI_TOKEN 改为随机强密码
+mkdir -p /opt/napcat-plus/{qq,config,plugins}
 docker compose --env-file deploy/.env -f deploy/compose.yaml up -d --build
 ```
+
+源码 Compose 默认也使用 `/opt/napcat-plus` 下的绑定目录；如修改 `NAPCAT_PLUS_DIR`，请先创建对应的三个子目录。它与一键脚本生成的 Compose 文件是两种部署方式，请勿同时启动占用相同端口的实例。
 
 数据挂载路径：
 
@@ -87,12 +91,12 @@ docker compose --env-file deploy/.env -f deploy/compose.yaml up -d --build
 ### 标准安装目录（用 install.sh 装的）
 
 ```bash
-cd ~/napcat-plus
+cd /opt/napcat-plus
 docker compose pull
 docker compose up -d
 ```
 
-或者直接再跑一次安装脚本（幂等，不会动数据和 Token）：
+或者直接再跑一次安装脚本（保留数据和 Token，但会重写 Compose 文件）：
 
 ```bash
 curl -fsSL https://hub.002230.xyz:44300/https://raw.githubusercontent.com/ljy2231/Napcat-Plus/main/deploy/install-cn.sh | bash
@@ -118,6 +122,23 @@ NAPCAT_PLUS_IMAGE=ghcr.io/ljy2231/napcat-plus:v0.3.0 \
 - 不要用 `docker compose down -v`
 - 升级只换镜像，账号数据、登录态、插件配置都在宿主机绑定目录里保留
 - 升级后浏览器可能仍持有旧资源，按一次 `Ctrl + F5`
+
+## 卸载
+
+一键脚本安装的默认实例可先停止并删除容器，保留数据：
+
+```bash
+docker compose -f /opt/napcat-plus/compose.yaml down
+```
+
+**完整删除不可恢复**：请先备份 `/opt/napcat-plus`，核对目录属于要卸载的实例，确认不再需要 QQ 登录数据、配置、插件和 Token 后再删除：
+
+```bash
+ls -la /opt/napcat-plus
+rm -rf -- /opt/napcat-plus
+```
+
+如果安装时自定义了 `NAPCAT_PLUS_DIR`，须改用实际目录。`docker run` 或源码 Compose 安装方式需用对应容器或 Compose 文件停止；不要执行全局 Docker 清理命令，以免影响其他服务。
 
 ## 来源与许可
 
@@ -195,8 +216,8 @@ pnpm run build:shell
 ## 自动构建与发布
 
 - 分支推送/PR：只读权限运行 CI，不使用 `pull_request_target` 执行不可信代码。
-- 推送 `v*` 标签：构建并推送 `ghcr.io/ljy2231/napcat-plus`。
-- 手动镜像构建默认发布：`publish` 默认为 `true`，会推送带提交 SHA 标签的镜像；仅构建时可将其设为 `false`，但此时不会执行容器启动验证。手动构建不会更新 `latest`；推送 `v*` 标签才会更新。首次 GHCR 包的可见性可在 GitHub Packages 中设置。
+- 推送 `v*` 标签：构建并推送对应版本镜像；仅不含 `-` 的正式版本标签更新 `latest`，预览版标签不会更新 `latest`。
+- 手动镜像构建默认发布：`publish` 默认为 `true`，会推送带提交 SHA 标签的镜像；仅构建时可将其设为 `false`，但此时不会执行容器启动验证。手动构建不会更新 `latest`。首次 GHCR 包的可见性可在 GitHub Packages 中设置。
 - 当前发布流程先推送镜像，再验证容器启动和 WebUI 响应；验证失败时镜像可能已经发布。该验证不检查二维码是否生成。
 - GHCR 只使用该仓库 `GITHUB_TOKEN`，不需要把个人 Token 写入代码或工作流。
 - 本地构建可覆盖 `QQ_RUNTIME` 参数，但必须重新验证对应 QQ 版本兼容性。

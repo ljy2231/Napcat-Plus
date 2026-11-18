@@ -1,7 +1,7 @@
 name: ${COMPOSE_PROJECT_NAME:-napcat-plus}
 services:
   console:
-    image: napcat-plus:0.3.0
+    image: napcat-plus:0.4.0-preview.1
     build:
       context: ..
       dockerfile: deploy/Dockerfile
@@ -14,9 +14,9 @@ services:
       # Localhost by default. Use SSH forwarding or an authenticated TLS proxy.
       - "${BIND_HOST:-127.0.0.1}:${WEBUI_PORT:-6099}:6099"
     volumes:
-      - qq-data:/app/.config/QQ
-      - console-config:/app/napcat/config
-      - console-plugins:/app/napcat/plugins
+      - ${NAPCAT_PLUS_DIR:-/opt/napcat-plus}/qq:/app/.config/QQ
+      - ${NAPCAT_PLUS_DIR:-/opt/napcat-plus}/config:/app/napcat/config
+      - ${NAPCAT_PLUS_DIR:-/opt/napcat-plus}/plugins:/app/napcat/plugins
     networks:
       - bot-network
     stop_grace_period: 30s
@@ -24,8 +24,3 @@ services:
 networks:
   bot-network:
     name: ${BOT_NETWORK:-napcat-plus-network}
-
-volumes:
-  qq-data:
-  console-config:
-  console-plugins:
