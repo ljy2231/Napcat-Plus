@@ -7,7 +7,7 @@ WORKDIR /src
 RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 COPY . .
 RUN pnpm install --frozen-lockfile --ignore-scripts
-ARG CONSOLE_VERSION=0.2.0
+ARG CONSOLE_VERSION=0.3.0
 ENV NAPCAT_VERSION=4.18.42+napcat-plus.${CONSOLE_VERSION}
 RUN pnpm run typecheck && pnpm --filter napcat-test exec vitest run
 RUN pnpm run build:webui && pnpm run build:shell && pnpm run build:plugin-builtin

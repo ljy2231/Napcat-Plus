@@ -5,7 +5,7 @@ import { sendError, sendSuccess } from '../utils/response';
 import { getGScoreRuntime } from '@/napcat-common/src/gscore/runtime';
 import { ConsoleCleaner } from '../helper/ConsoleCleaner';
 import { OB11PluginMangerAdapter } from '@/napcat-onebot/network/plugin-manger';
-const consoleVersion = '0.2.0-preview.3';
+const consoleVersion = '0.3.0';
 
 const router = Router();
 const runtime = () => {

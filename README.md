@@ -34,14 +34,14 @@ NAPCAT_PLUS_PORT=6100 NAPCAT_PLUS_DIR=/opt/napcat-plus \
 | `NAPCAT_PLUS_PORT` | `6099` | 宿主端口 |
 | `NAPCAT_PLUS_DIR` | `$HOME/napcat-plus` | 安装目录 |
 | `NAPCAT_PLUS_BIND` | `0.0.0.0` | 监听地址，反代后面可设 `127.0.0.1` |
-| `NAPCAT_PLUS_IMAGE` | GHCR `latest` | 指定版本，如 `:v0.2.0-preview.3` |
+| `NAPCAT_PLUS_IMAGE` | GHCR `latest` | 指定版本，如 `:v0.3.0` |
 | `NAPCAT_PLUS_MIRROR` | 空 | 镜像源前缀；`install-cn.sh` 已内置 `hub.002230.xyz:44300` |
 
 镜像地址：
 
 | 镜像 | 说明 |
 | --- | --- |
-| `ghcr.io/ljy2231/napcat-plus:latest` / `:v0.2.0-preview.3` | 应用镜像，约 2.4 GB |
+| `ghcr.io/ljy2231/napcat-plus:latest` / `:v0.3.0` | 应用镜像，约 2.4 GB |
 | `hub.002230.xyz:44300/ghcr.io/ljy2231/napcat-plus:latest` | 同一镜像的国内加速路径，摘要一致 |
 | `ghcr.io/ljy2231/napcat-plus-base:qq-3.2.34-53644` | 固定 QQ 运行时；上游 `mlikiowa/napcat-docker` 已随删库消失，此镜像为复刻 |
 
@@ -108,7 +108,7 @@ docker rm -f napcat-plus   # 数据在宿主机目录里，不会丢
 ### 指定版本
 
 ```bash
-NAPCAT_PLUS_IMAGE=ghcr.io/ljy2231/napcat-plus:v0.2.0-preview.3 \
+NAPCAT_PLUS_IMAGE=ghcr.io/ljy2231/napcat-plus:v0.3.0 \
   bash -c "$(curl -fsSL https://raw.githubusercontent.com/ljy2231/Napcat-Plus/main/deploy/install.sh)"
 ```
 
