@@ -17,6 +17,24 @@ IMAGE_ID = 'sha256:' + 'b' * 64
 CID = 'c' * 64
 
 
+def open_test_directory(path):
+    path = Path(path)
+    fd = os.open('/', os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        for component in path.parts[1:]:
+            try:
+                os.mkdir(component, 0o700, dir_fd=fd)
+            except FileExistsError:
+                pass
+            new = os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+            os.close(fd)
+            fd = new
+        return fd
+    except BaseException:
+        os.close(fd)
+        raise
+
+
 def runtime_fixture():
     env = {'WEBUI_TOKEN': 'private-test-token', 'NAPCAT_PLUS_PINNED': '1', 'TZ': 'Asia/Shanghai'}
     service = {'image': 'ghcr.io/ljy2231/napcat-plus:v0.5.1', 'container_name': 'napcat-plus',
@@ -38,7 +56,6 @@ class BootstrapTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory(prefix='napcat-bootstrap-test-')
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
-        self.patches = []
         for name, value in {'DATA': self.root / 'data', 'OLD_COMPOSE': self.root / 'data/compose.yaml',
                             'ETC': self.root / 'etc', 'STATE': self.root / 'state', 'PROGRAM': self.root / 'program',
                             'UNITS': self.root / 'units', 'JOURNAL': self.root / 'journal', 'SOCKET_DIR': self.root / 'socket'}.items():
@@ -50,9 +67,9 @@ class BootstrapTests(unittest.TestCase):
             (b.DATA / name / 'sentinel').write_text('preserve-me')
         b.OLD_COMPOSE.write_text('original-compose-content')
         (b.DATA / '.env').write_text('WEBUI_TOKEN=private-test-token\n')
-        self.addCleanup(mock.patch.stopall)
         mock.patch.object(subprocess, 'run', side_effect=AssertionError('real commands forbidden')).start()
         mock.patch.object(b.socket, 'create_connection', side_effect=AssertionError('real network forbidden')).start()
+        self.addCleanup(mock.patch.stopall)
 
     def test_runtime_identity_and_drift_checks(self):
         resolved, container, image = runtime_fixture()
@@ -92,6 +109,8 @@ class BootstrapTests(unittest.TestCase):
         with mock.patch.object(b, 'preflight', return_value=plan), mock.patch.object(b, 'docker', side_effect=docker), \
              mock.patch.object(b, 'systemctl') as systemctl, mock.patch.object(b, 'command'), \
              mock.patch.object(b.grp, 'getgrnam', return_value=mock.Mock()), \
+             mock.patch.object(os, 'geteuid', return_value=0), \
+             mock.patch.object(b.p, 'open_directory', side_effect=open_test_directory), \
              mock.patch.object(b, 'UnixConnection', return_value=connection), mock.patch.object(b, 'wait_healthy'), \
              mock.patch.object(b, 'check_socket_from_container', side_effect=b.SetupError('verification failed') if fail_webui else None):
             if fail_webui or uncertain:

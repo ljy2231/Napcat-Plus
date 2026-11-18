@@ -35,6 +35,24 @@ def resolved():
     }}, 'networks': {'default': {'name': 'napcat-plus_default'}}}
 
 
+def open_test_directory(path):
+    path = Path(path)
+    fd = os.open('/', os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        for component in path.parts[1:]:
+            try:
+                os.mkdir(component, 0o700, dir_fd=fd)
+            except FileExistsError:
+                pass
+            new = os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+            os.close(fd)
+            fd = new
+        return fd
+    except BaseException:
+        os.close(fd)
+        raise
+
+
 def build(value=None, **kwargs):
     options = {'project': 'napcat-plus', 'service_name': 'napcat', 'data_root': DATA,
                'origin': 'https://console.example.test', 'target_image': CURRENT,
@@ -139,7 +157,8 @@ class ApplyTests(unittest.TestCase):
         compose, policy, baseline = build()
         with tempfile.TemporaryDirectory() as tmp:
             out, state = Path(tmp) / 'etc', Path(tmp) / 'state'
-            with mock.patch.object(os, 'geteuid', return_value=0):
+            with mock.patch.object(os, 'geteuid', return_value=0), \
+                 mock.patch.object(p, 'open_directory', side_effect=open_test_directory):
                 p.apply_files(out, state, compose, policy, baseline)
                 for path in (out / 'compose.json', out / 'policy.json', state / 'committed.json'):
                     self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
@@ -157,7 +176,8 @@ class ApplyTests(unittest.TestCase):
             out, state = root / 'etc', root / 'state'
             state.mkdir(mode=0o700)
             (state / 'pending.json').write_text('do-not-touch')
-            with mock.patch.object(os, 'geteuid', return_value=0):
+            with mock.patch.object(os, 'geteuid', return_value=0), \
+                 mock.patch.object(p, 'open_directory', side_effect=open_test_directory):
                 with self.assertRaises(p.PrepareError):
                     p.apply_files(out, state, compose, policy, baseline)
                 self.assertEqual((state / 'pending.json').read_text(), 'do-not-touch')
